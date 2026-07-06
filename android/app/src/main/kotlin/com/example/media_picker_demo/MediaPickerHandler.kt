@@ -1,3 +1,5 @@
+// TODO: change this to your app's package (same package as MainActivity),
+// e.g. package com.yourcompany.yourapp
 package com.example.media_picker_demo
 
 import android.Manifest
@@ -24,7 +26,8 @@ import java.util.concurrent.Executors
  *
  * Methods:
  *  - requestPermission            -> "granted" | "limited" | "denied"
- *  - getAssets(type, page, size)  -> List<Map>
+ *  - getAssets(type, page, size, albumId?) -> List<Map>
+ *  - getAlbums(type)              -> List<Map> (bucket albums)
  *  - getThumbnail(id, type, size) -> ByteArray (JPEG)
  *  - getOriginalPath(id, type)    -> String absolute path
  */
@@ -49,10 +52,25 @@ class MediaPickerHandler(private val activity: Activity) :
                 val type = call.argument<String>("type") ?: "all"
                 val page = call.argument<Int>("page") ?: 0
                 val pageSize = call.argument<Int>("pageSize") ?: 60
+                val albumId = call.argument<Any>("albumId")?.toString()
                 executor.execute {
                     try {
-                        val assets = queryAssets(type, page, pageSize)
+                        val assets = queryAssets(type, page, pageSize, albumId)
                         activity.runOnUiThread { result.success(assets) }
+                    } catch (e: Exception) {
+                        activity.runOnUiThread {
+                            result.error("QUERY_ERROR", e.message, null)
+                        }
+                    }
+                }
+            }
+
+            "getAlbums" -> {
+                val type = call.argument<String>("type") ?: "all"
+                executor.execute {
+                    try {
+                        val albums = queryAlbums(type)
+                        activity.runOnUiThread { result.success(albums) }
                     } catch (e: Exception) {
                         activity.runOnUiThread {
                             result.error("QUERY_ERROR", e.message, null)
@@ -201,6 +219,7 @@ class MediaPickerHandler(private val activity: Activity) :
         type: String,
         page: Int,
         pageSize: Int,
+        albumId: String? = null,
     ): List<Map<String, Any?>> {
         val collection = MediaStore.Files.getContentUri("external")
         val projection = arrayOf(
@@ -213,12 +232,23 @@ class MediaPickerHandler(private val activity: Activity) :
             MediaStore.Files.FileColumns.HEIGHT,
             "duration", // present for videos; guarded below
         )
-        val selection = mediaTypeSelection(type)
+        var selection = mediaTypeSelection(type)
+        var selectionArgs: Array<String>? = null
+        if (albumId != null) {
+            selection += " AND bucket_id = ?"
+            selectionArgs = arrayOf(albumId)
+        }
         val offset = page * pageSize
 
         val cursor = if (Build.VERSION.SDK_INT >= 30) {
             val args = Bundle().apply {
                 putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+                if (selectionArgs != null) {
+                    putStringArray(
+                        ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS,
+                        selectionArgs,
+                    )
+                }
                 putStringArray(
                     ContentResolver.QUERY_ARG_SORT_COLUMNS,
                     arrayOf(MediaStore.Files.FileColumns.DATE_ADDED),
@@ -236,7 +266,7 @@ class MediaPickerHandler(private val activity: Activity) :
                 "${MediaStore.Files.FileColumns.DATE_ADDED} DESC " +
                     "LIMIT $pageSize OFFSET $offset"
             activity.contentResolver.query(
-                collection, projection, selection, null, sortOrder,
+                collection, projection, selection, selectionArgs, sortOrder,
             )
         } ?: return emptyList()
 
@@ -279,6 +309,75 @@ class MediaPickerHandler(private val activity: Activity) :
             }
         }
         return list
+    }
+
+    // ---------------------------------------------------------------- albums
+
+    /**
+     * Groups media by MediaStore bucket (folder). Single pass over a
+     * light projection (IDs only), newest first, so the first row seen
+     * per bucket is also its cover.
+     */
+    private fun queryAlbums(type: String): List<Map<String, Any?>> {
+        val collection = MediaStore.Files.getContentUri("external")
+        val projection = arrayOf(
+            MediaStore.Files.FileColumns._ID,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
+            "bucket_id",
+            "bucket_display_name",
+        )
+        val selection = mediaTypeSelection(type)
+        val sortOrder = "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
+
+        val cursor = activity.contentResolver.query(
+            collection, projection, selection, null, sortOrder,
+        ) ?: return emptyList()
+
+        // LinkedHashMap keeps insertion order = newest-cover-first albums.
+        data class AlbumAcc(
+            val name: String,
+            val coverId: Long,
+            val coverType: String,
+            var count: Int,
+        )
+
+        val albums = LinkedHashMap<String, AlbumAcc>()
+        cursor.use { c ->
+            val idCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+            val typeCol =
+                c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+            val bucketIdCol = c.getColumnIndex("bucket_id")
+            val bucketNameCol = c.getColumnIndex("bucket_display_name")
+            if (bucketIdCol < 0) return emptyList()
+
+            while (c.moveToNext()) {
+                val bucketId = c.getString(bucketIdCol) ?: continue
+                val existing = albums[bucketId]
+                if (existing != null) {
+                    existing.count++
+                } else {
+                    val isVideo = c.getInt(typeCol) ==
+                        MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                    albums[bucketId] = AlbumAcc(
+                        name = (if (bucketNameCol >= 0) {
+                            c.getString(bucketNameCol)
+                        } else null) ?: "Unknown",
+                        coverId = c.getLong(idCol),
+                        coverType = if (isVideo) "video" else "image",
+                        count = 1,
+                    )
+                }
+            }
+        }
+        return albums.map { (id, a) ->
+            mapOf(
+                "id" to id,
+                "name" to a.name,
+                "count" to a.count,
+                "coverId" to a.coverId,
+                "coverType" to a.coverType,
+            )
+        }
     }
 
     // ------------------------------------------------------------- thumbnail

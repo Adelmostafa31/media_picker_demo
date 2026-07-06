@@ -87,3 +87,36 @@ class PickedMediaAsset {
     return '${(b / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }
+
+/// A gallery album — a MediaStore bucket (Android) or a
+/// PHAssetCollection (iOS). Shown in the "Albums" tab.
+class MediaAlbum {
+  /// bucket_id (Android) or PHAssetCollection.localIdentifier (iOS).
+  final String id;
+  final String name;
+
+  /// Number of assets matching the active [MediaFilter].
+  final int count;
+
+  /// Newest asset in the album, used as the cover thumbnail.
+  final String? coverAssetId;
+  final String coverAssetType; // 'image' | 'video'
+
+  const MediaAlbum({
+    required this.id,
+    required this.name,
+    required this.count,
+    this.coverAssetId,
+    this.coverAssetType = 'image',
+  });
+
+  factory MediaAlbum.fromMap(Map<dynamic, dynamic> map) {
+    return MediaAlbum(
+      id: map['id'].toString(),
+      name: map['name'] as String? ?? '',
+      count: (map['count'] as num?)?.toInt() ?? 0,
+      coverAssetId: map['coverId']?.toString(),
+      coverAssetType: map['coverType'] as String? ?? 'image',
+    );
+  }
+}

@@ -32,19 +32,37 @@ class MediaPickerChannel {
     }
   }
 
+  /// Pass [albumId] to fetch a single album's assets ("Albums" tab);
+  /// leave it null for the global newest-first feed ("Recent" tab).
   static Future<List<PickedMediaAsset>> getAssets({
     required MediaFilter filter,
     required int page,
     required int pageSize,
+    String? albumId,
   }) async {
     final raw = await _channel.invokeMethod<List<dynamic>>('getAssets', {
       'type': _filterToType(filter),
       'page': page,
       'pageSize': pageSize,
+      'albumId': albumId,
     });
     if (raw == null) return const [];
     return raw
         .map((e) => PickedMediaAsset.fromMap(e as Map<dynamic, dynamic>))
+        .toList();
+  }
+
+  /// Albums (buckets / PHAssetCollections) that contain at least one
+  /// asset matching [filter], newest cover first.
+  static Future<List<MediaAlbum>> getAlbums({
+    required MediaFilter filter,
+  }) async {
+    final raw = await _channel.invokeMethod<List<dynamic>>('getAlbums', {
+      'type': _filterToType(filter),
+    });
+    if (raw == null) return const [];
+    return raw
+        .map((e) => MediaAlbum.fromMap(e as Map<dynamic, dynamic>))
         .toList();
   }
 

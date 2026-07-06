@@ -43,6 +43,17 @@ class MediaPickerColors {
   final Color tilePlaceholder;
   final Color divider;
 
+  // ---- Recent / Albums tab bar ----
+
+  /// Background of the tab bar row. Transparent by default so it
+  /// inherits [background].
+  final Color tabBarBackground;
+  final Color tabSelectedText;
+  final Color tabUnselectedText;
+
+  /// Underline under the active tab.
+  final Color tabIndicator;
+
   const MediaPickerColors({
     this.background = const Color(0xFFFFFFFF),
     this.appBar = const Color(0xFFFFFFFF),
@@ -61,6 +72,10 @@ class MediaPickerColors {
     this.videoBadgeText = const Color(0xFFFFFFFF),
     this.tilePlaceholder = const Color(0xFFE0E0E0),
     this.divider = const Color(0x1F000000),
+    this.tabBarBackground = const Color(0x00000000),
+    this.tabSelectedText = const Color(0xFF1C1C1E),
+    this.tabUnselectedText = const Color(0xFF8E8E93),
+    this.tabIndicator = const Color(0xFF25D366),
   });
 
   MediaPickerColors copyWith({
@@ -81,6 +96,10 @@ class MediaPickerColors {
     Color? videoBadgeText,
     Color? tilePlaceholder,
     Color? divider,
+    Color? tabBarBackground,
+    Color? tabSelectedText,
+    Color? tabUnselectedText,
+    Color? tabIndicator,
   }) {
     return MediaPickerColors(
       background: background ?? this.background,
@@ -102,6 +121,10 @@ class MediaPickerColors {
       videoBadgeText: videoBadgeText ?? this.videoBadgeText,
       tilePlaceholder: tilePlaceholder ?? this.tilePlaceholder,
       divider: divider ?? this.divider,
+      tabBarBackground: tabBarBackground ?? this.tabBarBackground,
+      tabSelectedText: tabSelectedText ?? this.tabSelectedText,
+      tabUnselectedText: tabUnselectedText ?? this.tabUnselectedText,
+      tabIndicator: tabIndicator ?? this.tabIndicator,
     );
   }
 }
@@ -127,6 +150,22 @@ class MediaPickerConfig {
 
   /// Fully custom leading widget for fullScreen mode.
   final Widget? customLeading;
+
+  // ---- Tabs (Recent / Albums) ----
+
+  /// Shows the Recent / Albums tab bar. Set false for the old
+  /// single-feed behavior.
+  final bool enableAlbums;
+
+  /// Localizable tab labels, e.g. 'الحديثة' / 'الألبومات'.
+  final String recentTabLabel;
+  final String albumsTabLabel;
+
+  /// Base style for tab labels; the color is overridden by
+  /// [MediaPickerColors.tabSelectedText] / [tabUnselectedText].
+  final TextStyle? tabLabelStyle;
+  final double tabBarHeight;
+  final double tabIndicatorHeight;
 
   // ---- List ----
   final ListStyle listStyle;
@@ -196,6 +235,12 @@ class MediaPickerConfig {
     this.showSheetDragHandle = true,
     this.fullScreenLeading = FullScreenLeading.close,
     this.customLeading,
+    this.enableAlbums = true,
+    this.recentTabLabel = 'Recent',
+    this.albumsTabLabel = 'Albums',
+    this.tabLabelStyle,
+    this.tabBarHeight = 44,
+    this.tabIndicatorHeight = 2,
     this.listStyle = ListStyle.grid,
     this.gridCrossAxisCount = 3,
     this.gridSpacing = 4,
@@ -235,6 +280,12 @@ class MediaPickerConfig {
     bool? showSheetDragHandle,
     FullScreenLeading? fullScreenLeading,
     Widget? customLeading,
+    bool? enableAlbums,
+    String? recentTabLabel,
+    String? albumsTabLabel,
+    TextStyle? tabLabelStyle,
+    double? tabBarHeight,
+    double? tabIndicatorHeight,
     ListStyle? listStyle,
     int? gridCrossAxisCount,
     double? gridSpacing,
@@ -273,6 +324,12 @@ class MediaPickerConfig {
       showSheetDragHandle: showSheetDragHandle ?? this.showSheetDragHandle,
       fullScreenLeading: fullScreenLeading ?? this.fullScreenLeading,
       customLeading: customLeading ?? this.customLeading,
+      enableAlbums: enableAlbums ?? this.enableAlbums,
+      recentTabLabel: recentTabLabel ?? this.recentTabLabel,
+      albumsTabLabel: albumsTabLabel ?? this.albumsTabLabel,
+      tabLabelStyle: tabLabelStyle ?? this.tabLabelStyle,
+      tabBarHeight: tabBarHeight ?? this.tabBarHeight,
+      tabIndicatorHeight: tabIndicatorHeight ?? this.tabIndicatorHeight,
       listStyle: listStyle ?? this.listStyle,
       gridCrossAxisCount: gridCrossAxisCount ?? this.gridCrossAxisCount,
       gridSpacing: gridSpacing ?? this.gridSpacing,
