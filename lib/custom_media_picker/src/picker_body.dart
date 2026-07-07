@@ -58,6 +58,10 @@ class _PickerBodyState extends State<PickerBody> {
   @override
   void initState() {
     super.initState();
+    final initial = config.initialSelection;
+    if (initial != null && initial.isNotEmpty) {
+      _selected.addAll(initial);
+    }
     _loadMore(_recent);
   }
 

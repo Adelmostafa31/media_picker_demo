@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'picker_models.dart';
+
 /// How the picker is presented.
 enum LayoutStyle { sheet, fullScreen }
 
@@ -185,6 +187,9 @@ class MediaPickerConfig {
   // ---- Behavior ----
   final MediaFilter mediaFilter;
 
+  /// Assets already selected when the picker opens.
+  final List<PickedMediaAsset>? initialSelection;
+
   /// 0 = unlimited.
   final int maxSelection;
 
@@ -226,6 +231,10 @@ class MediaPickerConfig {
   final VoidCallback? onSelectionLimitReached;
   final VoidCallback? onPermissionDenied;
 
+  /// Called after the picker closes with a confirmed selection. Use this to
+  /// refocus your text input so the keyboard comes back up.
+  final VoidCallback? onFocused;
+
   const MediaPickerConfig({
     this.layoutStyle = LayoutStyle.sheet,
     this.sheetInitialHeight = 0.65,
@@ -249,6 +258,7 @@ class MediaPickerConfig {
     this.listThumbnailSize = 56,
     this.listThumbnailRadius = 8,
     this.mediaFilter = MediaFilter.all,
+    this.initialSelection,
     this.maxSelection = 0,
     this.pageSize = 60,
     this.thumbnailSize = 256,
@@ -269,6 +279,7 @@ class MediaPickerConfig {
     this.colors = const MediaPickerColors(),
     this.onSelectionLimitReached,
     this.onPermissionDenied,
+    this.onFocused,
   });
 
   MediaPickerConfig copyWith({
@@ -294,6 +305,7 @@ class MediaPickerConfig {
     double? listThumbnailSize,
     double? listThumbnailRadius,
     MediaFilter? mediaFilter,
+    List<PickedMediaAsset>? initialSelection,
     int? maxSelection,
     int? pageSize,
     int? thumbnailSize,
@@ -314,6 +326,7 @@ class MediaPickerConfig {
     MediaPickerColors? colors,
     VoidCallback? onSelectionLimitReached,
     VoidCallback? onPermissionDenied,
+    VoidCallback? onFocused,
   }) {
     return MediaPickerConfig(
       layoutStyle: layoutStyle ?? this.layoutStyle,
@@ -338,6 +351,7 @@ class MediaPickerConfig {
       listThumbnailSize: listThumbnailSize ?? this.listThumbnailSize,
       listThumbnailRadius: listThumbnailRadius ?? this.listThumbnailRadius,
       mediaFilter: mediaFilter ?? this.mediaFilter,
+      initialSelection: initialSelection ?? this.initialSelection,
       maxSelection: maxSelection ?? this.maxSelection,
       pageSize: pageSize ?? this.pageSize,
       thumbnailSize: thumbnailSize ?? this.thumbnailSize,
@@ -360,6 +374,7 @@ class MediaPickerConfig {
       onSelectionLimitReached:
           onSelectionLimitReached ?? this.onSelectionLimitReached,
       onPermissionDenied: onPermissionDenied ?? this.onPermissionDenied,
+      onFocused: onFocused ?? this.onFocused,
     );
   }
 }

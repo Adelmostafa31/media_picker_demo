@@ -15,7 +15,7 @@
 ///   ),
 /// );
 /// ```
-library custom_media_picker;
+library;
 
 export 'src/picker.dart';
 export 'src/picker_body.dart' show PickerBody, PickerAssetThumbnail;

@@ -28,22 +28,30 @@ class CustomMediaPicker {
     }
     if (!context.mounted) return null;
 
+    final List<PickedMediaAsset>? assets;
     if (config.layoutStyle == LayoutStyle.fullScreen) {
-      return Navigator.of(context, rootNavigator: true)
+      assets = await Navigator.of(context, rootNavigator: true)
           .push<List<PickedMediaAsset>>(
         MaterialPageRoute(
           builder: (_) => FullScreenPickerPage(config: config),
         ),
       );
+    } else {
+      assets = await showModalBottomSheet<List<PickedMediaAsset>>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: const Color(0x00000000),
+        builder: (_) => SheetPicker(config: config),
+      );
     }
 
-    return showModalBottomSheet<List<PickedMediaAsset>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: const Color(0x00000000),
-      builder: (_) => SheetPicker(config: config),
-    );
+    // Only refocus the caller's input (keyboard) when the user confirmed a
+    // selection — dismissing the picker returns null and keeps focus as-is.
+    if (assets != null && assets.isNotEmpty) {
+      config.onFocused?.call();
+    }
+    return assets;
   }
 }
 

@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/services.dart';
 
 import 'picker_config.dart';
@@ -19,6 +17,17 @@ class MediaPickerChannel {
         return 'video';
       case MediaFilter.all:
         return 'all';
+    }
+  }
+
+  /// Non-interactive check — returns the current permission status without
+  /// showing a system dialog.
+  static Future<String> checkPermission() async {
+    try {
+      final res = await _channel.invokeMethod<String>('checkPermission');
+      return res ?? 'denied';
+    } on PlatformException {
+      return 'denied';
     }
   }
 
