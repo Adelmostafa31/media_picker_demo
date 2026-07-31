@@ -67,6 +67,16 @@ flutter run
 - iOS can resolve assets from iCloud when needed.
 - The package is designed to work as a reusable library while keeping the example app and native integrations in the same repository.
 
+## 👨‍💻 Maintainer
+
+**Adel Mostafa**
+
+Senior Flutter Developer
+
+- 🌐 Portfolio: https://adel-mostafa.vercel.app
+- 🐙 GitHub: https://github.com/Adelmostafa31
+- 💼 LinkedIn: https://linkedin.com/in/adel-mostafa
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
