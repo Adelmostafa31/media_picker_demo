@@ -16,7 +16,7 @@ A Flutter package that lets you pick images and videos from the device gallery u
 
 | Android | iOS |
 | :---: | :---: |
-| <img src="https://raw.githubusercontent.com/Adelmostafa31/media_picker_demo/main/doc/demo_android.gif" alt="Custom Media Picker running on Android" width="280"> | <img src="https://raw.githubusercontent.com/Adelmostafa31/media_picker_demo/main/doc/demo_ios.gif" alt="Custom Media Picker running on iOS" width="280"> |
+| ![Custom Media Picker running on Android](https://raw.githubusercontent.com/Adelmostafa31/media_picker_demo/main/doc/demo_android.gif) | ![Custom Media Picker running on iOS](https://raw.githubusercontent.com/Adelmostafa31/media_picker_demo/main/doc/demo_ios.gif) |
 
 ## Platform support
 
