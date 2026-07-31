@@ -53,7 +53,13 @@ if (assets != null) {
 
 ## Example app
 
-The repository includes a demo app showing many configuration options, theme presets, and selection workflows.
+The repository includes a demo app in `example/` showing many configuration options, theme presets, and selection workflows.
+
+```bash
+cd example
+flutter pub get
+flutter run
+```
 
 ## Notes
 
