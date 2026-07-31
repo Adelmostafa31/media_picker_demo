@@ -288,9 +288,8 @@ class _PickerBodyState extends State<PickerBody> {
                     height: config.tabIndicatorHeight,
                     margin: const EdgeInsets.symmetric(horizontal: 24),
                     decoration: BoxDecoration(
-                      color: selected
-                          ? c.tabIndicator
-                          : const Color(0x00000000),
+                      color:
+                          selected ? c.tabIndicator : const Color(0x00000000),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -416,8 +415,7 @@ class _PickerBodyState extends State<PickerBody> {
           selectionIndex: _selectionIndexOf(asset),
           config: config,
           onTap: () => _toggle(asset),
-          onLongPress:
-              config.enablePreview ? () => _openPreview(asset) : null,
+          onLongPress: config.enablePreview ? () => _openPreview(asset) : null,
         );
       },
     );
@@ -436,8 +434,7 @@ class _PickerBodyState extends State<PickerBody> {
           config: config,
           showDivider: index < feed.items.length - 1,
           onTap: () => _toggle(asset),
-          onLongPress:
-              config.enablePreview ? () => _openPreview(asset) : null,
+          onLongPress: config.enablePreview ? () => _openPreview(asset) : null,
         );
       },
     );
@@ -449,7 +446,7 @@ class _PickerBodyState extends State<PickerBody> {
     final count = _selected.length;
     final enabled = count > 0 && !_confirming;
     final label = config.confirmLabelBuilder?.call(count) ??
-        (count > 0 ? 'Confirm ($count)' : 'Confirm');
+        (count > 0 ? '${config.confirmLabel} ($count)' : config.confirmLabel);
     return SafeArea(
       top: false,
       child: Padding(
@@ -654,8 +651,7 @@ class _ListTileItem extends StatelessWidget {
           child: Row(
             children: [
               ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(config.listThumbnailRadius),
+                borderRadius: BorderRadius.circular(config.listThumbnailRadius),
                 child: SizedBox(
                   width: config.listThumbnailSize,
                   height: config.listThumbnailSize,
@@ -740,8 +736,7 @@ class _AlbumRow extends StatelessWidget {
           child: Row(
             children: [
               ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(config.listThumbnailRadius),
+                borderRadius: BorderRadius.circular(config.listThumbnailRadius),
                 child: SizedBox(
                   width: config.listThumbnailSize,
                   height: config.listThumbnailSize,
@@ -832,8 +827,7 @@ class _PickerAssetThumbnailState extends State<PickerAssetThumbnail> {
   @override
   void didUpdateWidget(covariant PickerAssetThumbnail oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.assetId != widget.assetId ||
-        oldWidget.size != widget.size) {
+    if (oldWidget.assetId != widget.assetId || oldWidget.size != widget.size) {
       _bytes = null;
       _load();
     }

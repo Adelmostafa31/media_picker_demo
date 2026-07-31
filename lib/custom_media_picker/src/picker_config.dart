@@ -216,7 +216,11 @@ class MediaPickerConfig {
   final String emptyText;
   final TextStyle? emptyTextStyle;
 
+  /// Base label for the confirm button when nothing is selected.
+  final String confirmLabel;
+
   /// Builds the confirm button label, e.g. (n) => 'إرسال ($n)'.
+  /// When provided, takes precedence over [confirmLabel].
   final String Function(int selectedCount)? confirmLabelBuilder;
 
   // ---- Sizes of small pieces ----
@@ -272,6 +276,7 @@ class MediaPickerConfig {
     this.confirmTextStyle,
     this.emptyText = 'No media found',
     this.emptyTextStyle,
+    this.confirmLabel = 'Confirm',
     this.confirmLabelBuilder,
     this.selectionBadgeSize = 22,
     this.confirmButtonHeight = 48,
@@ -319,6 +324,7 @@ class MediaPickerConfig {
     TextStyle? confirmTextStyle,
     String? emptyText,
     TextStyle? emptyTextStyle,
+    String? confirmLabel,
     String Function(int)? confirmLabelBuilder,
     double? selectionBadgeSize,
     double? confirmButtonHeight,
@@ -366,6 +372,7 @@ class MediaPickerConfig {
       confirmTextStyle: confirmTextStyle ?? this.confirmTextStyle,
       emptyText: emptyText ?? this.emptyText,
       emptyTextStyle: emptyTextStyle ?? this.emptyTextStyle,
+      confirmLabel: confirmLabel ?? this.confirmLabel,
       confirmLabelBuilder: confirmLabelBuilder ?? this.confirmLabelBuilder,
       selectionBadgeSize: selectionBadgeSize ?? this.selectionBadgeSize,
       confirmButtonHeight: confirmButtonHeight ?? this.confirmButtonHeight,

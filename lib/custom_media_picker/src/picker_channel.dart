@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'picker_config.dart';
@@ -8,6 +9,26 @@ class MediaPickerChannel {
   MediaPickerChannel._();
 
   static const MethodChannel _channel = MethodChannel('custom_media_picker');
+
+  static const EventChannel _changesChannel =
+      EventChannel('custom_media_picker/gallery_changes');
+
+  /// The native side only ships for Android and iOS; every other platform has
+  /// no plugin registered, so touching the channels there fails.
+  static bool get isSupported =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  /// Emits whenever the OS reports a change in the user's photo library.
+  ///
+  /// Returns an empty stream on unsupported platforms: activating an event
+  /// channel with no native implementation throws a MissingPluginException
+  /// that `EventChannel` reports through `FlutterError.reportError`, so it
+  /// cannot be caught by the subscriber.
+  static Stream<void> get galleryChanges => isSupported
+      ? _changesChannel.receiveBroadcastStream().map((_) {})
+      : const Stream<void>.empty();
 
   static String _filterToType(MediaFilter f) {
     switch (f) {
@@ -28,6 +49,8 @@ class MediaPickerChannel {
       return res ?? 'denied';
     } on PlatformException {
       return 'denied';
+    } on MissingPluginException {
+      return 'denied';
     }
   }
 
@@ -37,6 +60,8 @@ class MediaPickerChannel {
       final res = await _channel.invokeMethod<String>('requestPermission');
       return res ?? 'denied';
     } on PlatformException {
+      return 'denied';
+    } on MissingPluginException {
       return 'denied';
     }
   }
