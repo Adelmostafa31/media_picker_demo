@@ -6,12 +6,14 @@ import android.Manifest
 import android.app.Activity
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Size
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -25,7 +27,9 @@ import java.util.concurrent.Executors
  * Native side of the "custom_media_picker" MethodChannel.
  *
  * Methods:
+ *  - checkPermission              -> "granted" | "limited" | "notDetermined" | "denied"
  *  - requestPermission            -> "granted" | "limited" | "denied"
+ *  - openAppSettings              -> Boolean
  *  - getAssets(type, page, size, albumId?) -> List<Map>
  *  - getAlbums(type)              -> List<Map> (bucket albums)
  *  - getThumbnail(id, type, size) -> ByteArray (JPEG)
@@ -46,7 +50,11 @@ class MediaPickerHandler(private val activity: Activity) :
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "checkPermission" -> checkPermission(result)
+
             "requestPermission" -> requestPermission(result)
+
+            "openAppSettings" -> openAppSettings(result)
 
             "getAssets" -> {
                 val type = call.argument<String>("type") ?: "all"
@@ -158,6 +166,24 @@ class MediaPickerHandler(private val activity: Activity) :
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * Current status without prompting. "notDetermined" is reported while the
+     * system dialog has never been shown, so callers can tell a first run from
+     * a user who already refused and now has to go through Settings.
+     */
+    private fun checkPermission(result: MethodChannel.Result) {
+        result.success(
+            when {
+                hasFullAccess() -> "granted"
+                hasPartialAccess() -> "limited"
+                requiredPermissions().any {
+                    ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
+                } -> "denied"
+                else -> "notDetermined"
+            },
+        )
+    }
+
     private fun requestPermission(result: MethodChannel.Result) {
         if (hasFullAccess()) {
             result.success("granted")
@@ -196,6 +222,19 @@ class MediaPickerHandler(private val activity: Activity) :
         }
         pending.success(status)
         return true
+    }
+
+    private fun openAppSettings(result: MethodChannel.Result) {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", activity.packageName, null),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            activity.startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.success(false)
+        }
     }
 
     // ----------------------------------------------------------------- query

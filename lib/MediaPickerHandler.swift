@@ -6,7 +6,9 @@ import UIKit
 /// Native side of the "custom_media_picker" MethodChannel (iOS).
 ///
 /// Methods:
+///  - checkPermission              -> "granted" | "limited" | "notDetermined" | "denied"
 ///  - requestPermission            -> "granted" | "limited" | "denied"
+///  - openAppSettings              -> Bool
 ///  - getAssets(type, page, size, albumId?) -> [[String: Any]]
 ///  - getAlbums(type)              -> [[String: Any]] (collections)
 ///  - getThumbnail(id, type, size) -> FlutterStandardTypedData (JPEG)
@@ -17,8 +19,14 @@ class MediaPickerHandler: NSObject {
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "checkPermission":
+            result(currentStatus())
+
         case "requestPermission":
             requestPermission(result)
+
+        case "openAppSettings":
+            openAppSettings(result)
 
         case "getAssets":
             let args = call.arguments as? [String: Any] ?? [:]
@@ -64,6 +72,27 @@ class MediaPickerHandler: NSObject {
 
     // MARK: - Permission
 
+    /// Current status without showing anything. `notDetermined` is reported
+    /// separately from `denied` because iOS only ever presents the system
+    /// dialog once: after a refusal `requestAuthorization` returns the stored
+    /// answer immediately and the user has to be sent to Settings instead.
+    private func currentStatus() -> String {
+        if #available(iOS 14, *) {
+            switch PHPhotoLibrary.authorizationStatus(for: .readWrite) {
+            case .authorized: return "granted"
+            case .limited: return "limited"
+            case .notDetermined: return "notDetermined"
+            default: return "denied"
+            }
+        } else {
+            switch PHPhotoLibrary.authorizationStatus() {
+            case .authorized: return "granted"
+            case .notDetermined: return "notDetermined"
+            default: return "denied"
+            }
+        }
+    }
+
     private func requestPermission(_ result: @escaping FlutterResult) {
         if #available(iOS 14, *) {
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
@@ -80,6 +109,18 @@ class MediaPickerHandler: NSObject {
                 DispatchQueue.main.async {
                     result(status == .authorized ? "granted" : "denied")
                 }
+            }
+        }
+    }
+
+    private func openAppSettings(_ result: @escaping FlutterResult) {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            result(false)
+            return
+        }
+        DispatchQueue.main.async {
+            UIApplication.shared.open(url, options: [:]) { opened in
+                result(opened)
             }
         }
     }

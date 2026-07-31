@@ -43,6 +43,12 @@ class MediaPickerChannel {
 
   /// Non-interactive check — returns the current permission status without
   /// showing a system dialog.
+  ///
+  /// One of 'granted', 'limited', 'notDetermined' or 'denied'.
+  /// 'notDetermined' means the OS dialog has never been shown, so
+  /// [requestPermission] will present it; 'denied' on iOS means the user
+  /// already refused once and only Settings can change it — see
+  /// [openAppSettings].
   static Future<String> checkPermission() async {
     try {
       final res = await _channel.invokeMethod<String>('checkPermission');
@@ -54,7 +60,9 @@ class MediaPickerChannel {
     }
   }
 
-  /// Returns 'granted', 'limited' (iOS 14+/Android 14 partial) or 'denied'.
+  /// Shows the system photo/video access dialog when the status is still
+  /// undetermined, and returns 'granted', 'limited' (iOS 14+/Android 14
+  /// partial) or 'denied'.
   static Future<String> requestPermission() async {
     try {
       final res = await _channel.invokeMethod<String>('requestPermission');
@@ -63,6 +71,20 @@ class MediaPickerChannel {
       return 'denied';
     } on MissingPluginException {
       return 'denied';
+    }
+  }
+
+  /// Opens this app's page in the system Settings so the user can flip the
+  /// photo/video toggle after a hard denial. Returns false when the native
+  /// side is unavailable.
+  static Future<bool> openAppSettings() async {
+    try {
+      final res = await _channel.invokeMethod<bool>('openAppSettings');
+      return res ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
     }
   }
 

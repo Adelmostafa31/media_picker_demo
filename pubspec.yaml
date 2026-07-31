@@ -3,7 +3,7 @@ description: A Flutter package for picking images and videos from the device gal
 homepage: https://github.com/Adelmostafa31/media_picker_demo
 repository: https://github.com/Adelmostafa31/media_picker_demo
 issue_tracker: https://github.com/Adelmostafa31/media_picker_demo/issues
-version: 0.1.1
+version: 0.1.2
 
 environment:
   sdk: ^3.4.0
@@ -21,6 +21,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+# Rendered as a gallery on the package's pub.dev page.
+screenshots:
+  - description: The picker running on Android — grid layout, multi-select, send bar.
+    path: doc/demo_android.gif
+  - description: The picker running on iOS — sheet layout, albums tab, preview.
+    path: doc/demo_ios.gif
 
 topics:
   - media

@@ -77,7 +77,76 @@ class _DemoHomePageState extends State<DemoHomePage> {
 
   List<PickedMediaAsset> _picked = [];
 
+  /// Asks for photo/video access before opening the picker.
+  ///
+  /// The system dialog can only be raised while the status is still
+  /// undetermined — once the user has refused, iOS never prompts again and
+  /// Android stops prompting after two refusals, so the only way back is the
+  /// app's own page in Settings.
+  Future<bool> _ensureMediaAccess() async {
+    var status = await MediaPickerChannel.checkPermission();
+    if (status == 'granted' || status == 'limited') return true;
+
+    if (status == 'notDetermined') {
+      if (!mounted) return false;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.perm_media_outlined),
+          title: const Text('Allow access to photos & videos?'),
+          content: const Text(
+            'The picker reads images and videos straight from your gallery '
+            'so it can show them in its own UI. Nothing leaves your device.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return false;
+
+      status = await MediaPickerChannel.requestPermission();
+      if (status == 'granted' || status == 'limited') return true;
+    }
+
+    if (!mounted) return false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.lock_outline),
+        title: const Text('Photos access is turned off'),
+        content: const Text(
+          'The system will not ask again. Enable Photos for this app in '
+          'Settings, then come back and tap "Open picker".',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              MediaPickerChannel.openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+
   Future<void> _pick() async {
+    if (!await _ensureMediaAccess() || !mounted) return;
+
     final config = MediaPickerConfig(
       layoutStyle: _layout,
       listStyle: _list,

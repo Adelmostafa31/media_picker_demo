@@ -13,3 +13,8 @@ ios/.symlinks/
 ios/Flutter/ephemeral/
 android/.gradle/
 android/local.properties
+
+# Raw screen recordings. Only the converted GIFs in doc/ are committed —
+# the sources are ~15 MB each and would ship inside the published package.
+*.mov
+*.mp4
