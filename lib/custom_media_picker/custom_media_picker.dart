@@ -2,7 +2,7 @@
 ///
 /// Usage:
 /// ```dart
-/// import 'package:your_app/custom_media_picker/custom_media_picker.dart';
+/// import 'package:custom_media_picker/custom_media_picker.dart';
 ///
 /// final assets = await CustomMediaPicker.pick(
 ///   context,

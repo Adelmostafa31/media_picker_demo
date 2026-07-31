@@ -1,7 +1,9 @@
-name: media_picker_demo
-description: Demo app for the custom in-house media picker (no picker packages).
-publish_to: 'none'
-version: 1.0.0+1
+name: custom_media_picker
+description: A Flutter package for picking images and videos from the device gallery with a custom UI, native Android/iOS access, and preview support.
+homepage: https://github.com/Adelmostafa31/media_picker_demo
+repository: https://github.com/Adelmostafa31/media_picker_demo
+issue_tracker: https://github.com/Adelmostafa31/media_picker_demo/issues
+version: 0.1.0
 
 environment:
   sdk: ^3.4.0
@@ -19,3 +21,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+topics:
+  - media
+  - picker
+  - gallery
+  - image
+  - video

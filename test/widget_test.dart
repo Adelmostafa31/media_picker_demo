@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_picker_demo/main.dart';
+import 'package:custom_media_picker/main.dart';
 
 void main() {
   testWidgets('Demo home renders', (tester) async {

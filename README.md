@@ -1,62 +1,72 @@
-# Custom Media Picker — Demo Project
+# Custom Media Picker
 
-A runnable demo of the fully custom, package-free gallery picker
-(images + videos, Android MediaStore + iOS PHPhotoKit via MethodChannel).
-The only dependency is `video_player`, used exclusively for the
-full-screen video preview.
+A Flutter package that lets you pick images and videos from the device gallery using a custom UI instead of relying on a 3rd-party picker package. It uses native Android and iOS access through platform channels and supports previews, selection limits, and theming.
 
-## How to run
+## Features
 
-The zip ships all the important files (Dart code, `MainActivity.kt`,
-`MediaPickerHandler.kt`, `AppDelegate.swift` with the iOS handler embedded,
-`AndroidManifest.xml`, `Info.plist`). One command generates the remaining
-boilerplate (Gradle files, Xcode project, launch assets, etc.):
+- Image and video selection
+- Grid or list layouts
+- Bottom sheet or full-screen picker
+- Filtering by media type
+- Selection limits and callback hooks
+- Customizable color tokens
+- Full-image and video preview support
+
+## Installation
+
+Add the package to your project:
 
 ```bash
-cd media_picker_demo        # keep this folder name — it's the project name
-flutter create .            # regenerates missing scaffolding, KEEPS existing files
+flutter pub add custom_media_picker
+```
+
+or add it directly to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  custom_media_picker: ^0.1.0
+```
+
+## Usage
+
+```dart
+import 'package:custom_media_picker/custom_media_picker.dart';
+
+final assets = await CustomMediaPicker.pick(
+  context,
+  config: MediaPickerConfig(
+    layoutStyle: LayoutStyle.sheet,
+    listStyle: ListStyle.grid,
+    gridCrossAxisCount: 3,
+    maxSelection: 9,
+    mediaFilter: MediaFilter.all,
+    title: 'Select media',
+  ),
+);
+
+if (assets != null) {
+  for (final asset in assets) {
+    print(asset.path);
+  }
+}
+```
+
+## Example app
+
+The repository includes a demo app in `example/` showing many configuration options, theme presets, and selection workflows.
+
+```bash
+cd example
 flutter pub get
 flutter run
 ```
 
-> Do NOT pass `--overwrite` to `flutter create` — the default behavior
-> (skip files that already exist) is exactly what we rely on: it fills in
-> the missing platform boilerplate while preserving the wired-up
-> `MainActivity.kt`, `AppDelegate.swift`, manifest and plist.
-
-No Xcode steps needed for iOS: the native handler is embedded inside
-`AppDelegate.swift`, which is already part of the Runner target.
-
-## What the demo lets you test
-
-- **Layout**: bottom sheet (WhatsApp style, draggable) vs full screen
-  (with X / back leading).
-- **List style**: grid (2–5 columns via slider) vs list view.
-- **Media filter**: all / images only / videos only.
-- **Max selection**: 0 (unlimited) to 10, with a snackbar on limit.
-- **Themes**: 4 sample `MediaPickerColors` sets (light / dark /
-  whatsapp / purple) to prove all colors are injectable tokens.
-- **Results**: picked assets shown in selection order with numbered
-  badges; tap any tile for its metadata + resolved file path.
-- **Preview**: long-press any tile inside the picker — pinch-zoom for
-  images, playable scrubber for videos.
-
-## Where the picker code lives
-
-```
-lib/custom_media_picker/            # drop this folder into any app
-android/.../MediaPickerHandler.kt   # + wiring in MainActivity.kt
-ios/Runner/AppDelegate.swift        # handler class embedded at the bottom
-```
-
-To use it in your own app, see `CustomMediaPicker.pick(context, config: ...)`
-in `lib/main.dart` for a complete example.
-
 ## Notes
 
-- Android 14+: "Select photos" partial access is treated as `limited`
-  and the picker proceeds with the user-selected subset.
-- iOS: the first path resolution of an iCloud-only asset downloads it
-  (spinner shows on the confirm button meanwhile).
-- Files copied during path resolution use a `picker_` prefix in
-  cacheDir (Android) / tmp (iOS) if you ever want to clean them up.
+- Android 14+ partial access is supported through the native media picker flow.
+- iOS can resolve assets from iCloud when needed.
+- The package is designed to work as a reusable library while keeping the example app and native integrations in the same repository.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
