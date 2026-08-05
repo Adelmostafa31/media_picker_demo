@@ -11,6 +11,18 @@ enum ListStyle { grid, listView }
 /// Which media types are shown.
 enum MediaFilter { all, onlyImages, onlyVideos }
 
+/// How the Recent tab feed is ordered.
+enum MediaSortOrder {
+  /// Newest asset first (default).
+  newestFirst,
+
+  /// Oldest asset first.
+  oldestFirst,
+
+  /// Restricted to a user-picked date window (newest first within it).
+  dateRange,
+}
+
 /// Leading icon when [LayoutStyle.fullScreen] is used.
 enum FullScreenLeading { back, close }
 
@@ -56,6 +68,31 @@ class MediaPickerColors {
   /// Underline under the active tab.
   final Color tabIndicator;
 
+  // ---- Sort row & sheet (Recent tab) ----
+
+  /// Selected option checkmark in the sort sheet, and the sort row's icon
+  /// when a non-default sort (date range) is active.
+  final Color sortAccent;
+
+  // ---- Date range picker (shown for the "Custom range" sort option) ----
+
+  /// Dialog surface behind the calendar.
+  final Color dateRangeSurface;
+
+  /// Text drawn on top of [dateRangeSelectedFill] (selected day number).
+  final Color dateRangeHeaderText;
+
+  /// Fill of the selected start/end day. Defaults to [confirmButton] (so it
+  /// tracks it automatically) unless you pass your own.
+  final Color? dateRangeSelectedFill;
+
+  /// Fill of the days between start and end. Defaults to [confirmButton] at
+  /// 50% opacity unless you pass your own.
+  final Color? dateRangeRangeFill;
+
+  /// Text color of days between start and end.
+  final Color dateRangeRangeText;
+
   const MediaPickerColors({
     this.background = const Color(0xFFFFFFFF),
     this.appBar = const Color(0xFFFFFFFF),
@@ -78,6 +115,12 @@ class MediaPickerColors {
     this.tabSelectedText = const Color(0xFF1C1C1E),
     this.tabUnselectedText = const Color(0xFF8E8E93),
     this.tabIndicator = const Color(0xFF25D366),
+    this.sortAccent = const Color(0xFF25D366),
+    this.dateRangeSurface = const Color(0xFFFFFFFF),
+    this.dateRangeHeaderText = const Color(0xFFFFFFFF),
+    this.dateRangeSelectedFill,
+    this.dateRangeRangeFill,
+    this.dateRangeRangeText = const Color(0xFF1C1C1E),
   });
 
   MediaPickerColors copyWith({
@@ -102,6 +145,12 @@ class MediaPickerColors {
     Color? tabSelectedText,
     Color? tabUnselectedText,
     Color? tabIndicator,
+    Color? sortAccent,
+    Color? dateRangeSurface,
+    Color? dateRangeHeaderText,
+    Color? dateRangeSelectedFill,
+    Color? dateRangeRangeFill,
+    Color? dateRangeRangeText,
   }) {
     return MediaPickerColors(
       background: background ?? this.background,
@@ -127,6 +176,13 @@ class MediaPickerColors {
       tabSelectedText: tabSelectedText ?? this.tabSelectedText,
       tabUnselectedText: tabUnselectedText ?? this.tabUnselectedText,
       tabIndicator: tabIndicator ?? this.tabIndicator,
+      sortAccent: sortAccent ?? this.sortAccent,
+      dateRangeSurface: dateRangeSurface ?? this.dateRangeSurface,
+      dateRangeHeaderText: dateRangeHeaderText ?? this.dateRangeHeaderText,
+      dateRangeSelectedFill:
+          dateRangeSelectedFill ?? this.dateRangeSelectedFill,
+      dateRangeRangeFill: dateRangeRangeFill ?? this.dateRangeRangeFill,
+      dateRangeRangeText: dateRangeRangeText ?? this.dateRangeRangeText,
     );
   }
 }
@@ -168,6 +224,29 @@ class MediaPickerConfig {
   final TextStyle? tabLabelStyle;
   final double tabBarHeight;
   final double tabIndicatorHeight;
+
+  // ---- Sort (Recent tab) ----
+
+  /// Shows the sort row under the tab bar while the Recent tab is open.
+  /// Off by default — set true to enable sorting.
+  final bool enableSort;
+
+  /// Sort applied to the Recent feed when the picker opens.
+  final MediaSortOrder initialSortOrder;
+
+  /// Localizable sort row / sheet labels.
+  final String sortRowLabel;
+  final String sortOldToNewLabel;
+  final String sortNewToOldLabel;
+  final String sortDateRangeLabel;
+
+  /// Placeholder text shown in the date range picker's header before the
+  /// start/end day has been picked, e.g. 'Start Date' / 'End Date'.
+  final String dateRangeStartLabel;
+  final String dateRangeEndLabel;
+
+  /// Label of the date range picker's confirm button.
+  final String dateRangeSaveLabel;
 
   // ---- List ----
   final ListStyle listStyle;
@@ -254,6 +333,15 @@ class MediaPickerConfig {
     this.tabLabelStyle,
     this.tabBarHeight = 44,
     this.tabIndicatorHeight = 2,
+    this.enableSort = false,
+    this.initialSortOrder = MediaSortOrder.newestFirst,
+    this.sortRowLabel = 'Sort',
+    this.sortOldToNewLabel = 'Old to new',
+    this.sortNewToOldLabel = 'New to old',
+    this.sortDateRangeLabel = 'Custom range',
+    this.dateRangeStartLabel = 'Start Date',
+    this.dateRangeEndLabel = 'End Date',
+    this.dateRangeSaveLabel = 'Save',
     this.listStyle = ListStyle.grid,
     this.gridCrossAxisCount = 3,
     this.gridSpacing = 4,
@@ -302,6 +390,15 @@ class MediaPickerConfig {
     TextStyle? tabLabelStyle,
     double? tabBarHeight,
     double? tabIndicatorHeight,
+    bool? enableSort,
+    MediaSortOrder? initialSortOrder,
+    String? sortRowLabel,
+    String? sortOldToNewLabel,
+    String? sortNewToOldLabel,
+    String? sortDateRangeLabel,
+    String? dateRangeStartLabel,
+    String? dateRangeEndLabel,
+    String? dateRangeSaveLabel,
     ListStyle? listStyle,
     int? gridCrossAxisCount,
     double? gridSpacing,
@@ -349,6 +446,15 @@ class MediaPickerConfig {
       tabLabelStyle: tabLabelStyle ?? this.tabLabelStyle,
       tabBarHeight: tabBarHeight ?? this.tabBarHeight,
       tabIndicatorHeight: tabIndicatorHeight ?? this.tabIndicatorHeight,
+      enableSort: enableSort ?? this.enableSort,
+      initialSortOrder: initialSortOrder ?? this.initialSortOrder,
+      sortRowLabel: sortRowLabel ?? this.sortRowLabel,
+      sortOldToNewLabel: sortOldToNewLabel ?? this.sortOldToNewLabel,
+      sortNewToOldLabel: sortNewToOldLabel ?? this.sortNewToOldLabel,
+      sortDateRangeLabel: sortDateRangeLabel ?? this.sortDateRangeLabel,
+      dateRangeStartLabel: dateRangeStartLabel ?? this.dateRangeStartLabel,
+      dateRangeEndLabel: dateRangeEndLabel ?? this.dateRangeEndLabel,
+      dateRangeSaveLabel: dateRangeSaveLabel ?? this.dateRangeSaveLabel,
       listStyle: listStyle ?? this.listStyle,
       gridCrossAxisCount: gridCrossAxisCount ?? this.gridCrossAxisCount,
       gridSpacing: gridSpacing ?? this.gridSpacing,

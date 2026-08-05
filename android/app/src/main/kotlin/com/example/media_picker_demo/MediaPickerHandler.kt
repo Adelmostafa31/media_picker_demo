@@ -30,7 +30,7 @@ import java.util.concurrent.Executors
  *  - checkPermission              -> "granted" | "limited" | "notDetermined" | "denied"
  *  - requestPermission            -> "granted" | "limited" | "denied"
  *  - openAppSettings              -> Boolean
- *  - getAssets(type, page, size, albumId?) -> List<Map>
+ *  - getAssets(type, page, size, albumId?, ascending?, startDate?, endDate?) -> List<Map>
  *  - getAlbums(type)              -> List<Map> (bucket albums)
  *  - getThumbnail(id, type, size) -> ByteArray (JPEG)
  *  - getOriginalPath(id, type)    -> String absolute path
@@ -61,9 +61,14 @@ class MediaPickerHandler(private val activity: Activity) :
                 val page = call.argument<Int>("page") ?: 0
                 val pageSize = call.argument<Int>("pageSize") ?: 60
                 val albumId = call.argument<Any>("albumId")?.toString()
+                val ascending = call.argument<Boolean>("ascending") ?: false
+                val startDate = call.argument<Any>("startDate")?.toString()?.toLongOrNull()
+                val endDate = call.argument<Any>("endDate")?.toString()?.toLongOrNull()
                 executor.execute {
                     try {
-                        val assets = queryAssets(type, page, pageSize, albumId)
+                        val assets = queryAssets(
+                            type, page, pageSize, albumId, ascending, startDate, endDate,
+                        )
                         activity.runOnUiThread { result.success(assets) }
                     } catch (e: Exception) {
                         activity.runOnUiThread {
@@ -259,6 +264,9 @@ class MediaPickerHandler(private val activity: Activity) :
         page: Int,
         pageSize: Int,
         albumId: String? = null,
+        ascending: Boolean = false,
+        startDate: Long? = null,
+        endDate: Long? = null,
     ): List<Map<String, Any?>> {
         val collection = MediaStore.Files.getContentUri("external")
         val projection = arrayOf(
@@ -272,11 +280,18 @@ class MediaPickerHandler(private val activity: Activity) :
             "duration", // present for videos; guarded below
         )
         var selection = mediaTypeSelection(type)
-        var selectionArgs: Array<String>? = null
+        val selectionArgsList = mutableListOf<String>()
         if (albumId != null) {
             selection += " AND bucket_id = ?"
-            selectionArgs = arrayOf(albumId)
+            selectionArgsList.add(albumId)
         }
+        if (startDate != null && endDate != null) {
+            selection += " AND ${MediaStore.Files.FileColumns.DATE_ADDED} BETWEEN ? AND ?"
+            selectionArgsList.add(startDate.toString())
+            selectionArgsList.add(endDate.toString())
+        }
+        val selectionArgs =
+            if (selectionArgsList.isEmpty()) null else selectionArgsList.toTypedArray()
         val offset = page * pageSize
 
         val cursor = if (Build.VERSION.SDK_INT >= 30) {
@@ -294,7 +309,11 @@ class MediaPickerHandler(private val activity: Activity) :
                 )
                 putInt(
                     ContentResolver.QUERY_ARG_SORT_DIRECTION,
-                    ContentResolver.QUERY_SORT_DIRECTION_DESCENDING,
+                    if (ascending) {
+                        ContentResolver.QUERY_SORT_DIRECTION_ASCENDING
+                    } else {
+                        ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
+                    },
                 )
                 putInt(ContentResolver.QUERY_ARG_LIMIT, pageSize)
                 putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
@@ -302,7 +321,7 @@ class MediaPickerHandler(private val activity: Activity) :
             activity.contentResolver.query(collection, projection, args, null)
         } else {
             val sortOrder =
-                "${MediaStore.Files.FileColumns.DATE_ADDED} DESC " +
+                "${MediaStore.Files.FileColumns.DATE_ADDED} ${if (ascending) "ASC" else "DESC"} " +
                     "LIMIT $pageSize OFFSET $offset"
             activity.contentResolver.query(
                 collection, projection, selection, selectionArgs, sortOrder,

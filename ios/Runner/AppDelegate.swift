@@ -33,8 +33,11 @@ import UIKit
 /// Native side of the "custom_media_picker" MethodChannel (iOS).
 ///
 /// Methods:
+///  - checkPermission              -> "granted" | "limited" | "notDetermined" | "denied"
 ///  - requestPermission            -> "granted" | "limited" | "denied"
-///  - getAssets(type, page, size)  -> [[String: Any]]
+///  - openAppSettings              -> Bool
+///  - getAssets(type, page, size, albumId?, ascending?, startDate?, endDate?) -> [[String: Any]]
+///  - getAlbums(type)              -> [[String: Any]] (collections)
 ///  - getThumbnail(id, type, size) -> FlutterStandardTypedData (JPEG)
 ///  - getOriginalPath(id, type)    -> String absolute path
 class MediaPickerHandler: NSObject {
@@ -43,17 +46,37 @@ class MediaPickerHandler: NSObject {
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "checkPermission":
+            result(currentStatus())
+
         case "requestPermission":
             requestPermission(result)
+
+        case "openAppSettings":
+            openAppSettings(result)
 
         case "getAssets":
             let args = call.arguments as? [String: Any] ?? [:]
             let type = args["type"] as? String ?? "all"
             let page = args["page"] as? Int ?? 0
             let pageSize = args["pageSize"] as? Int ?? 60
+            let albumId = args["albumId"] as? String
+            let ascending = args["ascending"] as? Bool ?? false
+            let startDate = args["startDate"] as? Int
+            let endDate = args["endDate"] as? Int
             DispatchQueue.global(qos: .userInitiated).async {
-                let assets = self.queryAssets(type: type, page: page, pageSize: pageSize)
+                let assets = self.queryAssets(
+                    type: type, page: page, pageSize: pageSize, albumId: albumId,
+                    ascending: ascending, startDate: startDate, endDate: endDate)
                 DispatchQueue.main.async { result(assets) }
+            }
+
+        case "getAlbums":
+            let args = call.arguments as? [String: Any] ?? [:]
+            let type = args["type"] as? String ?? "all"
+            DispatchQueue.global(qos: .userInitiated).async {
+                let albums = self.queryAlbums(type: type)
+                DispatchQueue.main.async { result(albums) }
             }
 
         case "getThumbnail":
@@ -80,6 +103,27 @@ class MediaPickerHandler: NSObject {
 
     // MARK: - Permission
 
+    /// Current status without showing anything. `notDetermined` is reported
+    /// separately from `denied` because iOS only ever presents the system
+    /// dialog once: after a refusal `requestAuthorization` returns the stored
+    /// answer immediately and the user has to be sent to Settings instead.
+    private func currentStatus() -> String {
+        if #available(iOS 14, *) {
+            switch PHPhotoLibrary.authorizationStatus(for: .readWrite) {
+            case .authorized: return "granted"
+            case .limited: return "limited"
+            case .notDetermined: return "notDetermined"
+            default: return "denied"
+            }
+        } else {
+            switch PHPhotoLibrary.authorizationStatus() {
+            case .authorized: return "granted"
+            case .notDetermined: return "notDetermined"
+            default: return "denied"
+            }
+        }
+    }
+
     private func requestPermission(_ result: @escaping FlutterResult) {
         if #available(iOS 14, *) {
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
@@ -100,31 +144,70 @@ class MediaPickerHandler: NSObject {
         }
     }
 
+    private func openAppSettings(_ result: @escaping FlutterResult) {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            result(false)
+            return
+        }
+        DispatchQueue.main.async {
+            UIApplication.shared.open(url, options: [:]) { opened in
+                result(opened)
+            }
+        }
+    }
+
     // MARK: - Query
 
-    private func fetchOptions(for type: String) -> PHFetchOptions {
+    /// [startDate]/[endDate] are unix seconds (inclusive); pass both to
+    /// restrict results to that window, e.g. for the Recent tab's custom
+    /// date range sort.
+    private func fetchOptions(
+        for type: String, ascending: Bool = false, startDate: Int? = nil,
+        endDate: Int? = nil
+    ) -> PHFetchOptions {
         let options = PHFetchOptions()
         options.sortDescriptors = [
-            NSSortDescriptor(key: "creationDate", ascending: false)
+            NSSortDescriptor(key: "creationDate", ascending: ascending)
         ]
+        var predicates: [NSPredicate] = []
         switch type {
         case "image":
-            options.predicate = NSPredicate(
-                format: "mediaType = %d", PHAssetMediaType.image.rawValue)
+            predicates.append(NSPredicate(
+                format: "mediaType = %d", PHAssetMediaType.image.rawValue))
         case "video":
-            options.predicate = NSPredicate(
-                format: "mediaType = %d", PHAssetMediaType.video.rawValue)
+            predicates.append(NSPredicate(
+                format: "mediaType = %d", PHAssetMediaType.video.rawValue))
         default:
-            options.predicate = NSPredicate(
+            predicates.append(NSPredicate(
                 format: "mediaType = %d OR mediaType = %d",
                 PHAssetMediaType.image.rawValue,
-                PHAssetMediaType.video.rawValue)
+                PHAssetMediaType.video.rawValue))
         }
+        if let startSec = startDate, let endSec = endDate {
+            let startDateValue = Date(timeIntervalSince1970: TimeInterval(startSec))
+            let endDateValue = Date(timeIntervalSince1970: TimeInterval(endSec))
+            predicates.append(NSPredicate(
+                format: "creationDate >= %@ AND creationDate <= %@",
+                startDateValue as NSDate, endDateValue as NSDate))
+        }
+        options.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         return options
     }
 
-    private func queryAssets(type: String, page: Int, pageSize: Int) -> [[String: Any]] {
-        let fetch = PHAsset.fetchAssets(with: fetchOptions(for: type))
+    private func queryAssets(
+        type: String, page: Int, pageSize: Int, albumId: String? = nil,
+        ascending: Bool = false, startDate: Int? = nil, endDate: Int? = nil
+    ) -> [[String: Any]] {
+        let options = fetchOptions(
+            for: type, ascending: ascending, startDate: startDate, endDate: endDate)
+        let fetch: PHFetchResult<PHAsset>
+        if let albumId = albumId,
+           let collection = PHAssetCollection.fetchAssetCollections(
+               withLocalIdentifiers: [albumId], options: nil).firstObject {
+            fetch = PHAsset.fetchAssets(in: collection, options: options)
+        } else {
+            fetch = PHAsset.fetchAssets(with: options)
+        }
         let start = page * pageSize
         guard start < fetch.count else { return [] }
         let end = min(start + pageSize, fetch.count)
@@ -145,6 +228,45 @@ class MediaPickerHandler: NSObject {
             ])
         }
         return list
+    }
+
+    // MARK: - Albums
+
+    /// User albums + useful smart albums (Favorites, Screenshots, Videos,
+    /// Selfies, ...). Skips the "Recents" smart album — that's the picker's
+    /// own Recent tab — and any album with no asset matching the filter.
+    private func queryAlbums(type: String) -> [[String: Any]] {
+        var list: [[String: Any]] = []
+
+        func append(_ collections: PHFetchResult<PHAssetCollection>) {
+            collections.enumerateObjects { collection, _, _ in
+                if collection.assetCollectionSubtype == .smartAlbumUserLibrary {
+                    return // = our "Recent" tab
+                }
+                let assets = PHAsset.fetchAssets(
+                    in: collection, options: self.fetchOptions(for: type))
+                guard assets.count > 0, let cover = assets.firstObject else {
+                    return
+                }
+                list.append([
+                    "id": collection.localIdentifier,
+                    "name": collection.localizedTitle ?? "",
+                    "count": assets.count,
+                    "coverId": cover.localIdentifier,
+                    "coverType": cover.mediaType == .video ? "video" : "image",
+                ])
+            }
+        }
+
+        append(PHAssetCollection.fetchAssetCollections(
+            with: .album, subtype: .any, options: nil))
+        append(PHAssetCollection.fetchAssetCollections(
+            with: .smartAlbum, subtype: .any, options: nil))
+
+        // Biggest albums first — matches what users expect to see on top.
+        return list.sorted {
+            ($0["count"] as? Int ?? 0) > ($1["count"] as? Int ?? 0)
+        }
     }
 
     // MARK: - Thumbnail

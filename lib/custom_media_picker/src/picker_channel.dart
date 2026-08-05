@@ -89,18 +89,27 @@ class MediaPickerChannel {
   }
 
   /// Pass [albumId] to fetch a single album's assets ("Albums" tab);
-  /// leave it null for the global newest-first feed ("Recent" tab).
+  /// leave it null for the global feed ("Recent" tab). [ascending] and the
+  /// [startDateSec]/[endDateSec] window (unix seconds, inclusive) only make
+  /// sense for the Recent feed's sort control — albums are always
+  /// newest-first.
   static Future<List<PickedMediaAsset>> getAssets({
     required MediaFilter filter,
     required int page,
     required int pageSize,
     String? albumId,
+    bool ascending = false,
+    int? startDateSec,
+    int? endDateSec,
   }) async {
     final raw = await _channel.invokeMethod<List<dynamic>>('getAssets', {
       'type': _filterToType(filter),
       'page': page,
       'pageSize': pageSize,
       'albumId': albumId,
+      'ascending': ascending,
+      'startDate': startDateSec,
+      'endDate': endDateSec,
     });
     if (raw == null) return const [];
     return raw

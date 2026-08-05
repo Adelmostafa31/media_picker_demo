@@ -77,6 +77,7 @@ class _DemoHomePageState extends State<DemoHomePage> {
   DemoTheme _theme = DemoTheme.light;
   int _maxSelection = 9; // 0 = unlimited
   int _gridColumns = 3;
+  bool _enableSort = false; // off by default; user flips this on
 
   List<PickedMediaAsset> _picked = [];
 
@@ -88,6 +89,7 @@ class _DemoHomePageState extends State<DemoHomePage> {
       fullScreenLeading: _leading,
       maxSelection: _maxSelection,
       gridCrossAxisCount: _gridColumns,
+      enableSort: _enableSort,
       colors: colorsFor(_theme),
       title: 'Select media',
       confirmLabelBuilder: (n) => 'Send ($n)',
@@ -217,6 +219,14 @@ class _DemoHomePageState extends State<DemoHomePage> {
                 child: Text(_maxSelection == 0 ? '∞' : '$_maxSelection'),
               ),
             ],
+          ),
+          _section('Sort (Recent tab)'),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show sort row'),
+            subtitle: const Text('Old to new / New to old / Custom range'),
+            value: _enableSort,
+            onChanged: (v) => setState(() => _enableSort = v),
           ),
           _section('Theme (color tokens)'),
           Wrap(

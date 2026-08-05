@@ -9,7 +9,7 @@ import UIKit
 ///  - checkPermission              -> "granted" | "limited" | "notDetermined" | "denied"
 ///  - requestPermission            -> "granted" | "limited" | "denied"
 ///  - openAppSettings              -> Bool
-///  - getAssets(type, page, size, albumId?) -> [[String: Any]]
+///  - getAssets(type, page, size, albumId?, ascending?, startDate?, endDate?) -> [[String: Any]]
 ///  - getAlbums(type)              -> [[String: Any]] (collections)
 ///  - getThumbnail(id, type, size) -> FlutterStandardTypedData (JPEG)
 ///  - getOriginalPath(id, type)    -> String absolute path
@@ -34,9 +34,13 @@ class MediaPickerHandler: NSObject {
             let page = args["page"] as? Int ?? 0
             let pageSize = args["pageSize"] as? Int ?? 60
             let albumId = args["albumId"] as? String
+            let ascending = args["ascending"] as? Bool ?? false
+            let startDate = args["startDate"] as? Int
+            let endDate = args["endDate"] as? Int
             DispatchQueue.global(qos: .userInitiated).async {
                 let assets = self.queryAssets(
-                    type: type, page: page, pageSize: pageSize, albumId: albumId)
+                    type: type, page: page, pageSize: pageSize, albumId: albumId,
+                    ascending: ascending, startDate: startDate, endDate: endDate)
                 DispatchQueue.main.async { result(assets) }
             }
 
@@ -127,37 +131,55 @@ class MediaPickerHandler: NSObject {
 
     // MARK: - Query
 
-    private func fetchOptions(for type: String) -> PHFetchOptions {
+    /// [startDate]/[endDate] are unix seconds (inclusive); pass both to
+    /// restrict results to that window, e.g. for the Recent tab's custom
+    /// date range sort.
+    private func fetchOptions(
+        for type: String, ascending: Bool = false, startDate: Int? = nil,
+        endDate: Int? = nil
+    ) -> PHFetchOptions {
         let options = PHFetchOptions()
         options.sortDescriptors = [
-            NSSortDescriptor(key: "creationDate", ascending: false)
+            NSSortDescriptor(key: "creationDate", ascending: ascending)
         ]
+        var predicates: [NSPredicate] = []
         switch type {
         case "image":
-            options.predicate = NSPredicate(
-                format: "mediaType = %d", PHAssetMediaType.image.rawValue)
+            predicates.append(NSPredicate(
+                format: "mediaType = %d", PHAssetMediaType.image.rawValue))
         case "video":
-            options.predicate = NSPredicate(
-                format: "mediaType = %d", PHAssetMediaType.video.rawValue)
+            predicates.append(NSPredicate(
+                format: "mediaType = %d", PHAssetMediaType.video.rawValue))
         default:
-            options.predicate = NSPredicate(
+            predicates.append(NSPredicate(
                 format: "mediaType = %d OR mediaType = %d",
                 PHAssetMediaType.image.rawValue,
-                PHAssetMediaType.video.rawValue)
+                PHAssetMediaType.video.rawValue))
         }
+        if let startSec = startDate, let endSec = endDate {
+            let startDateValue = Date(timeIntervalSince1970: TimeInterval(startSec))
+            let endDateValue = Date(timeIntervalSince1970: TimeInterval(endSec))
+            predicates.append(NSPredicate(
+                format: "creationDate >= %@ AND creationDate <= %@",
+                startDateValue as NSDate, endDateValue as NSDate))
+        }
+        options.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         return options
     }
 
     private func queryAssets(
-        type: String, page: Int, pageSize: Int, albumId: String? = nil
+        type: String, page: Int, pageSize: Int, albumId: String? = nil,
+        ascending: Bool = false, startDate: Int? = nil, endDate: Int? = nil
     ) -> [[String: Any]] {
+        let options = fetchOptions(
+            for: type, ascending: ascending, startDate: startDate, endDate: endDate)
         let fetch: PHFetchResult<PHAsset>
         if let albumId = albumId,
            let collection = PHAssetCollection.fetchAssetCollections(
                withLocalIdentifiers: [albumId], options: nil).firstObject {
-            fetch = PHAsset.fetchAssets(in: collection, options: fetchOptions(for: type))
+            fetch = PHAsset.fetchAssets(in: collection, options: options)
         } else {
-            fetch = PHAsset.fetchAssets(with: fetchOptions(for: type))
+            fetch = PHAsset.fetchAssets(with: options)
         }
         let start = page * pageSize
         guard start < fetch.count else { return [] }

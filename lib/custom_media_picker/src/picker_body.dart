@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'picker_channel.dart';
 import 'picker_config.dart';
+import 'picker_date_range.dart';
 import 'picker_models.dart';
 import 'picker_preview.dart';
 
@@ -52,12 +53,16 @@ class _PickerBodyState extends State<PickerBody> {
 
   bool _confirming = false;
 
+  late MediaSortOrder _sortOrder;
+  DateTimeRange? _dateRange;
+
   MediaPickerConfig get config => widget.config;
   MediaPickerColors get c => widget.config.colors;
 
   @override
   void initState() {
     super.initState();
+    _sortOrder = config.initialSortOrder;
     final initial = config.initialSelection;
     if (initial != null && initial.isNotEmpty) {
       _selected.addAll(initial);
@@ -70,12 +75,21 @@ class _PickerBodyState extends State<PickerBody> {
   Future<void> _loadMore(_PagedAssets feed) async {
     if (feed.loading || !feed.hasMore) return;
     setState(() => feed.loading = true);
+    // Sorting only applies to the global Recent feed, never to an album.
+    final isRecent = feed.albumId == null;
+    final range = isRecent ? _dateRange : null;
     try {
       final items = await MediaPickerChannel.getAssets(
         filter: config.mediaFilter,
         page: feed.page,
         pageSize: config.pageSize,
         albumId: feed.albumId,
+        ascending: isRecent && _sortOrder == MediaSortOrder.oldestFirst,
+        startDateSec:
+            range == null ? null : range.start.millisecondsSinceEpoch ~/ 1000,
+        endDateSec: range == null
+            ? null
+            : _endOfDay(range.end).millisecondsSinceEpoch ~/ 1000,
       );
       if (!mounted) return;
       setState(() {
@@ -91,6 +105,17 @@ class _PickerBodyState extends State<PickerBody> {
         feed.hasMore = false;
       });
     }
+  }
+
+  static DateTime _endOfDay(DateTime d) =>
+      DateTime(d.year, d.month, d.day, 23, 59, 59);
+
+  /// Clears items/paging so the next [_loadMore] re-fetches from page 0
+  /// under the current sort.
+  void _resetFeed(_PagedAssets feed) {
+    feed.items.clear();
+    feed.page = 0;
+    feed.hasMore = true;
   }
 
   Future<void> _loadAlbums() async {
@@ -111,6 +136,121 @@ class _PickerBodyState extends State<PickerBody> {
         _albumsFetched = true;
         _albumsLoading = false;
       });
+    }
+  }
+
+  // ------------------------------------------------------------------ sort
+
+  void _applySort(MediaSortOrder order) {
+    if (order == _sortOrder && order != MediaSortOrder.dateRange) return;
+    setState(() {
+      _sortOrder = order;
+      if (order != MediaSortOrder.dateRange) _dateRange = null;
+    });
+    _resetFeed(_recent);
+    _loadMore(_recent);
+  }
+
+  void _clearDateRange() => _applySort(MediaSortOrder.newestFirst);
+
+  Future<void> _pickDateRange() async {
+    final result = await showMediaDateRangePicker(
+      context: context,
+      config: config,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      initialRange: _dateRange,
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _dateRange = result;
+      _sortOrder = MediaSortOrder.dateRange;
+    });
+    _resetFeed(_recent);
+    _loadMore(_recent);
+  }
+
+  Future<void> _showSortSheet() async {
+    final choice = await showModalBottomSheet<MediaSortOrder>(
+      context: context,
+      backgroundColor: c.background,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(config.sheetCornerRadius),
+        ),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            _sortOptionTile(
+              MediaSortOrder.newestFirst,
+              config.sortNewToOldLabel,
+            ),
+            _sortOptionTile(
+              MediaSortOrder.oldestFirst,
+              config.sortOldToNewLabel,
+            ),
+            _sortOptionTile(
+              MediaSortOrder.dateRange,
+              config.sortDateRangeLabel,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (choice == null) return;
+    if (choice == MediaSortOrder.dateRange) {
+      await _pickDateRange();
+    } else {
+      _applySort(choice);
+    }
+  }
+
+  Widget _sortOptionTile(MediaSortOrder order, String label) {
+    final selected = order == _sortOrder;
+    return InkWell(
+      onTap: () => Navigator.of(context).pop(order),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? c.sortAccent : c.text,
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+            if (selected) Icon(Icons.check, size: 18, color: c.sortAccent),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static const _monthAbbrs = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  String _formatDate(DateTime d) => '${d.day} ${_monthAbbrs[d.month - 1]}';
+
+  String _currentSortLabel() {
+    switch (_sortOrder) {
+      case MediaSortOrder.oldestFirst:
+        return config.sortOldToNewLabel;
+      case MediaSortOrder.newestFirst:
+        return config.sortNewToOldLabel;
+      case MediaSortOrder.dateRange:
+        final r = _dateRange;
+        if (r == null) return config.sortDateRangeLabel;
+        return '${_formatDate(r.start)} – ${_formatDate(r.end)}';
     }
   }
 
@@ -198,7 +338,14 @@ class _PickerBodyState extends State<PickerBody> {
   }
 
   Widget _buildContent() {
-    if (_tab == 0) return _buildFeed(_recent);
+    if (_tab == 0) {
+      return Column(
+        children: [
+          _buildSortRow(),
+          Expanded(child: _buildFeed(_recent)),
+        ],
+      );
+    }
     // Albums tab
     if (_openAlbum == null) return _buildAlbumList();
     return Column(
@@ -206,6 +353,49 @@ class _PickerBodyState extends State<PickerBody> {
         _buildAlbumHeader(_openAlbum!),
         Expanded(child: _buildFeed(_albumFeed!)),
       ],
+    );
+  }
+
+  Widget _buildSortRow() {
+    if (!config.enableSort) return const SizedBox.shrink();
+    final rangeActive = _sortOrder == MediaSortOrder.dateRange &&
+        _dateRange != null;
+    return InkWell(
+      onTap: _showSortSheet,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              Icons.sort,
+              size: 16,
+              color: rangeActive ? c.sortAccent : c.icon,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                '${config.sortRowLabel}: ${_currentSortLabel()}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: rangeActive ? c.sortAccent : c.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            if (rangeActive) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: _clearDateRange,
+                child: Icon(Icons.close, size: 16, color: c.secondaryText),
+              ),
+            ],
+            const Spacer(),
+            Icon(Icons.keyboard_arrow_down, size: 18, color: c.secondaryText),
+          ],
+        ),
+      ),
     );
   }
 

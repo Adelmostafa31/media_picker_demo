@@ -10,6 +10,7 @@ A Flutter package that lets you pick images and videos from the device gallery u
 - Filtering by media type
 - Selection limits and callback hooks
 - Customizable color tokens
+- Custom sort on the Recent tab (old → new, new → old, or a custom date range)
 - Full-image and video preview support
 
 ## Demo
@@ -36,7 +37,7 @@ or add it directly to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  custom_media_picker: ^0.1.2
+  custom_media_picker: ^0.1.3
 ```
 
 > **⚠️ This package is not a plugin — the native setup below is required.**
@@ -229,6 +230,44 @@ if (status == 'notDetermined') {
 
 `limited` (iOS 14+ "Selected Photos", Android 14+ partial access) is a working
 state: the picker shows the subset the user granted.
+
+## Sorting
+
+The Recent tab can show a sort row under the tab bar with three modes:
+
+- **New to old** — default once sorting is on.
+- **Old to new**.
+- **Custom range** — opens the picker's own date range sheet (not the stock
+  Flutter dialog); the feed is then restricted to that window (newest first
+  within it). Swipe or use the chevrons to page between months.
+
+`enableSort` defaults to `false` — the picker ships with no sort row until
+you turn it on:
+
+```dart
+MediaPickerConfig(
+  enableSort: true, // off by default; set true to show the sort row
+  initialSortOrder: MediaSortOrder.newestFirst,
+  dateRangeStartLabel: 'Start Date', // header placeholder before a start day is picked
+  dateRangeEndLabel: 'End Date',
+  dateRangeSaveLabel: 'Save',
+  colors: MediaPickerColors(
+    sortAccent: Color(0xFF25D366),          // selected option / active row tint
+    dateRangeSurface: Color(0xFFFFFFFF),    // sheet background
+    dateRangeHeaderText: Color(0xFFFFFFFF), // text on top of dateRangeSelectedFill
+    dateRangeRangeText: Color(0xFF1C1C1E),
+    // dateRangeSelectedFill / dateRangeRangeFill are left unset here, so
+    // they default to confirmButton (and confirmButton at 50% opacity for
+    // the in-range days) — pass your own Color to override either one.
+  ),
+)
+```
+
+Sorting only affects the Recent feed — album feeds are always newest-first.
+Native `getAssets` calls now carry `ascending`/`startDate`/`endDate`
+arguments; both native handlers default them to today's exact behavior
+(newest-first, no date filter), so existing native setups keep working
+without changes until you copy the updated handler files.
 
 ## Example app
 
