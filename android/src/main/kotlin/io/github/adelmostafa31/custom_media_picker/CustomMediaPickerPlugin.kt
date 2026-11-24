@@ -136,6 +136,8 @@ class CustomMediaPickerPlugin :
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "checkPermission" -> result.success(currentStatus())
+            // Android API level, for callers that pick native code paths by it.
+            "getSdkInt" -> result.success(Build.VERSION.SDK_INT)
             "requestPermission" -> requestPermission(result)
             "openAppSettings" -> openAppSettings(result)
             "getAssets" -> {
