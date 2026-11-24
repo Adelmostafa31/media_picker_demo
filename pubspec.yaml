@@ -1,5 +1,5 @@
 name: custom_media_picker
-description: A Flutter plugin for picking images and videos from the device gallery with a custom UI, native Android/iOS access, and preview support.
+description: Pick images and videos from the gallery and capture photos or videos with the camera, all with a fully customizable Flutter UI and native Android/iOS access.
 homepage: https://github.com/Adelmostafa31/media_picker_demo
 repository: https://github.com/Adelmostafa31/media_picker_demo
 issue_tracker: https://github.com/Adelmostafa31/media_picker_demo/issues
@@ -43,5 +43,5 @@ topics:
   - media
   - picker
   - gallery
-  - image
+  - camera
   - video
