@@ -7,6 +7,8 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 *.iml
+# Local review reports.
+/pr-review-*.md
 .idea/
 ios/Pods/
 ios/.symlinks/
@@ -18,3 +20,14 @@ android/local.properties
 # the sources are ~15 MB each and would ship inside the published package.
 *.mov
 *.mp4
+# Local agent config/skills.
+.claude/
+
+# SwiftPM build output of the iOS plugin.
+ios/custom_media_picker/.build/
+.swiftpm/
+example/android/.gradle/
+qa
+
+# Manual QA evidence (screenshots of a personal gallery).
+/qa/manual/runs/*/evidence/

@@ -1,0 +1,23 @@
+# Not part of the published package.
+*.mov
+*.mp4
+/pr-review-*.md
+/.claude/
+/build/
+/example/build/
+/example/.dart_tool/
+/ios/custom_media_picker/.build/
+# Machine-specific generated files.
+local.properties
+Generated.xcconfig
+flutter_export_environment.sh
+GeneratedPluginRegistrant.*
+/example/ios/Flutter/ephemeral/
+/example/ios/Pods/
+/example/ios/Podfile.lock
+/example/pubspec.lock
+qa
+
+# Manual QA evidence (screenshots of a personal gallery).
+/qa/manual/runs/*/evidence/
+/qa/
