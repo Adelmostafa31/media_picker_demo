@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:custom_media_picker/custom_media_picker.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 void main() => runApp(const MyApp());
@@ -85,10 +86,13 @@ class _DemoHomePageState extends State<DemoHomePage> {
   /// Android stops prompting after two refusals, so the only way back is the
   /// app's own page in Settings.
   Future<bool> _ensureMediaAccess() async {
-    var status = await MediaPickerChannel.checkPermission();
-    if (status == 'granted' || status == 'limited') return true;
+    var status = await MediaPickerChannel.checkPermissionStatus();
+    if (status.hasAccess) return true;
 
-    if (status == 'notDetermined') {
+    // Android re-shows the dialog after one refusal (`denied`); only
+    // `permanentlyDenied` (iOS after any refusal) needs Settings.
+    if (status == MediaPermissionStatus.notDetermined ||
+        status == MediaPermissionStatus.denied) {
       if (!mounted) return false;
       final proceed = await showDialog<bool>(
         context: context,
@@ -113,8 +117,14 @@ class _DemoHomePageState extends State<DemoHomePage> {
       );
       if (proceed != true) return false;
 
-      status = await MediaPickerChannel.requestPermission();
-      if (status == 'granted' || status == 'limited') return true;
+      status = await MediaPickerChannel.requestPermissionStatus();
+      if (status.hasAccess) return true;
+      if (status != MediaPermissionStatus.permanentlyDenied) return false;
+    } else {
+      // Android can't tell "refused for good" from "reset in Settings" before
+      // asking. Asking is free: with no dialog left it returns at once.
+      status = await MediaPickerChannel.requestPermissionStatus();
+      if (status.hasAccess) return true;
     }
 
     if (!mounted) return false;
@@ -336,10 +346,8 @@ class _DemoHomePageState extends State<DemoHomePage> {
                 mainAxisSpacing: 4,
               ),
               itemCount: _picked.length,
-              itemBuilder: (context, i) => _ResultTile(
-                asset: _picked[i],
-                index: i + 1,
-              ),
+              itemBuilder: (context, i) =>
+                  _ResultTile(asset: _picked[i], index: i + 1),
             ),
           ],
           const SizedBox(height: 40),
@@ -354,10 +362,7 @@ Widget _section(String label) {
     padding: const EdgeInsets.only(top: 16, bottom: 8),
     child: Text(
       label,
-      style: const TextStyle(
-        fontWeight: FontWeight.w600,
-        fontSize: 16,
-      ),
+      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
     ),
   );
 }
@@ -382,7 +387,15 @@ class _ResultTile extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(
-            child: hasFile
+            // Image.file can't decode a video; use the native thumbnail.
+            child: asset.isVideo
+                ? PickerAssetThumbnail(
+                    assetId: asset.id,
+                    assetType: asset.typeString,
+                    size: 256,
+                    placeholderColor: Colors.grey,
+                  )
+                : hasFile
                 ? Image.file(file, fit: BoxFit.cover)
                 : const ColoredBox(color: Colors.grey),
           ),
