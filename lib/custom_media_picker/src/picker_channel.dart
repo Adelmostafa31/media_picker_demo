@@ -210,6 +210,21 @@ class MediaPickerChannel {
     required String type,
   }) => _invoke<String>('getOriginalPath', {'id': id, 'type': type});
 
+  /// Adds the file at [path] to the device gallery and returns the new
+  /// asset's id (MediaStore id / PHAsset localIdentifier). [type] is
+  /// `'image'` or `'video'`; [album] puts it in a named album (iOS) or
+  /// sub-folder (Android). Throws a [PlatformException] with code
+  /// `PERMISSION` when the OS refuses access.
+  static Future<String?> saveToGallery({
+    required String path,
+    required String type,
+    String? album,
+  }) => _invoke<String>('saveToGallery', {
+    'path': path,
+    'type': type,
+    'album': album,
+  });
+
   /// Deletes every file copy the plugin made in the app's cache/tmp folder.
   /// Paths returned earlier stop being valid.
   static Future<void> clearCache() async {

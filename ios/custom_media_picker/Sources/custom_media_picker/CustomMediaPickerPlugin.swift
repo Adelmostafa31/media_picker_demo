@@ -90,6 +90,16 @@ public class CustomMediaPickerPlugin: NSObject, FlutterPlugin, FlutterStreamHand
             }
             getOriginalPath(id: id, result: result)
 
+        case "saveToGallery":
+            let args = call.arguments as? [String: Any] ?? [:]
+            guard let path = args["path"] as? String else {
+                result(FlutterError(code: "BAD_ARGS", message: "path is required", details: nil))
+                return
+            }
+            saveToGallery(
+                path: path, isVideo: (args["type"] as? String) == "video",
+                album: args["album"] as? String, result: result)
+
         case "clearCache":
             DispatchQueue.global(qos: .utility).async {
                 try? FileManager.default.removeItem(at: Self.cacheDir())
@@ -389,6 +399,63 @@ public class CustomMediaPickerPlugin: NSObject, FlutterPlugin, FlutterStreamHand
         } catch {
             try? fm.removeItem(at: part)
             return fm.fileExists(atPath: dest.path) ? dest.path : nil
+        }
+    }
+
+    // MARK: - Save to gallery
+
+    /// Adds a captured file to the library (optionally into [album], created
+    /// on demand) and returns the new asset's localIdentifier. Needs only
+    /// add-only access (NSPhotoLibraryAddUsageDescription), unless [album] is
+    /// set: finding or creating an album needs read/write access.
+    private func saveToGallery(
+        path: String, isVideo: Bool, album: String?, result: @escaping FlutterResult
+    ) {
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: path) else {
+            result(FlutterError(code: "BAD_ARGS", message: "No file at \(path)", details: nil))
+            return
+        }
+        let wantsAlbum = !(album ?? "").isEmpty
+        let level: PHAccessLevel = wantsAlbum ? .readWrite : .addOnly
+        PHPhotoLibrary.requestAuthorization(for: level) { status in
+            guard status == .authorized || status == .limited else {
+                DispatchQueue.main.async {
+                    result(FlutterError(
+                        code: "PERMISSION", message: "Photo library add access denied",
+                        details: nil))
+                }
+                return
+            }
+            var placeholder: PHObjectPlaceholder?
+            PHPhotoLibrary.shared().performChanges({
+                let request = isVideo
+                    ? PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                    : PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+                placeholder = request?.placeholderForCreatedAsset
+                if wantsAlbum, let name = album, let asset = placeholder {
+                    let existing = PHAssetCollection.fetchAssetCollections(
+                        with: .album, subtype: .albumRegular, options: nil)
+                    var target: PHAssetCollection?
+                    existing.enumerateObjects { c, _, stop in
+                        if c.localizedTitle == name { target = c; stop.pointee = true }
+                    }
+                    let albumRequest = target.flatMap { PHAssetCollectionChangeRequest(for: $0) }
+                        ?? PHAssetCollectionChangeRequest.creationRequestForAssetCollection(
+                            withTitle: name)
+                    albumRequest.addAssets([asset] as NSArray)
+                }
+            }) { ok, error in
+                DispatchQueue.main.async {
+                    if ok, let id = placeholder?.localIdentifier {
+                        result(id)
+                    } else {
+                        result(FlutterError(
+                            code: "SAVE_ERROR",
+                            message: error?.localizedDescription ?? "Save failed", details: nil))
+                    }
+                }
+            }
         }
     }
 

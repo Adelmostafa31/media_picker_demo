@@ -167,6 +167,22 @@ class CustomMediaPickerPlugin :
                 val type = call.argument<String>("type") ?: "image"
                 runInBackground(result, "PATH_ERROR") { resolveOriginalPath(id, type) }
             }
+            "saveToGallery" -> {
+                val path = call.argument<String>("path")
+                    ?: return result.error("BAD_ARGS", "path is required", null)
+                val type = call.argument<String>("type") ?: "image"
+                val album = call.argument<String>("album")
+                if (Build.VERSION.SDK_INT < 29 &&
+                    !isGranted(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                ) {
+                    return result.error(
+                        "PERMISSION",
+                        "WRITE_EXTERNAL_STORAGE is required below Android 10",
+                        null,
+                    )
+                }
+                runInBackground(result, "SAVE_ERROR") { saveToGallery(path, type, album) }
+            }
             "clearCache" -> runInBackground(result, "CACHE_ERROR") {
                 cacheDir().deleteRecursively()
                 null
@@ -536,6 +552,68 @@ class CustomMediaPickerPlugin :
         if (!stillRaw) return bitmap
         val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    // ------------------------------------------------------- save to gallery
+
+    /**
+     * Copies a captured file into the shared gallery (Pictures/ or Movies/,
+     * optionally in an [album] sub-folder) and returns its MediaStore id.
+     * Written as pending first, so a half-copied file never shows up.
+     */
+    private fun saveToGallery(path: String, type: String, album: String?): String {
+        val source = File(path)
+        require(source.exists()) { "No file at $path" }
+        val isVideo = type == "video"
+        val collection = if (isVideo) {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
+        val ext = source.extension.lowercase().ifEmpty { if (isVideo) "mp4" else "jpg" }
+        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+            ?: if (isVideo) "video/mp4" else "image/jpeg"
+        val root = if (isVideo) android.os.Environment.DIRECTORY_MOVIES
+        else android.os.Environment.DIRECTORY_PICTURES
+        val folder = album?.takeIf { it.isNotBlank() }?.let { "$root/$it" } ?: root
+        val now = System.currentTimeMillis()
+        val values = android.content.ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "${if (isVideo) "VID" else "IMG"}_$now.$ext")
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            put(MediaStore.MediaColumns.DATE_ADDED, now / 1000)
+            if (Build.VERSION.SDK_INT >= 29) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, folder)
+                put(MediaStore.MediaColumns.DATE_TAKEN, now)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = File(android.os.Environment.getExternalStoragePublicDirectory(root),
+                    album.orEmpty()).apply { mkdirs() }
+                @Suppress("DEPRECATION")
+                put(MediaStore.MediaColumns.DATA, File(dir, "${now}.$ext").absolutePath)
+            }
+        }
+        val resolver = context.contentResolver
+        val uri = resolver.insert(collection, values)
+            ?: throw IllegalStateException("MediaStore refused the insert")
+        try {
+            resolver.openOutputStream(uri)?.use { out ->
+                source.inputStream().use { it.copyTo(out) }
+            } ?: throw IllegalStateException("Can't open $uri")
+            if (Build.VERSION.SDK_INT >= 29) {
+                resolver.update(
+                    uri,
+                    android.content.ContentValues().apply {
+                        put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    },
+                    null, null,
+                )
+            }
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
+        }
+        return ContentUris.parseId(uri).toString()
     }
 
     // ----------------------------------------------------------- file path
