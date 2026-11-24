@@ -160,6 +160,26 @@ MediaPickerConfig(
 )
 ```
 
+### Sharing the limit with the camera
+
+Items the user already has outside the picker (e.g. camera captures) count
+toward `maxSelection` through `externalSelectedCount`; the camera does the
+same with `selectedCount`:
+
+```dart
+// Gallery: 2 max, 1 photo already taken → only 1 more can be picked.
+CustomMediaPicker.pick(context, config: MediaPickerConfig(
+  maxSelection: 2,
+  externalSelectedCount: captures.length,
+));
+
+// Camera: refuses the capture once picks + captures reach the max.
+CustomMediaPicker.capture(context, config: CameraConfig(
+  maxSelection: 2,
+  selectedCount: picked.length + captures.length,
+));
+```
+
 ## Camera (photo & video)
 
 `CustomMediaPicker.capture` opens a full-screen camera and returns the photo or

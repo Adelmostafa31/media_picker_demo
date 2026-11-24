@@ -14,10 +14,19 @@ class CameraDemoSection extends StatefulWidget {
   /// Items already picked in the gallery.
   final int pickedCount;
 
+  /// Captures so far (owned by the parent so the gallery picker can count
+  /// them too).
+  final List<CapturedMedia> captures;
+  final ValueChanged<CapturedMedia> onCaptured;
+  final VoidCallback onClear;
+
   const CameraDemoSection({
     super.key,
     required this.maxSelection,
     required this.pickedCount,
+    required this.captures,
+    required this.onCaptured,
+    required this.onClear,
   });
 
   @override
@@ -28,7 +37,6 @@ class _CameraDemoSectionState extends State<CameraDemoSection> {
   bool _saveToGallery = false;
   bool _customUi = false;
   bool _limit15s = true;
-  final List<CapturedMedia> _captures = [];
 
   Future<void> _open() async {
     final messenger = ScaffoldMessenger.of(context);
@@ -36,7 +44,7 @@ class _CameraDemoSectionState extends State<CameraDemoSection> {
       context,
       config: CameraConfig(
         maxSelection: widget.maxSelection,
-        selectedCount: widget.pickedCount + _captures.length,
+        selectedCount: widget.pickedCount + widget.captures.length,
         selectionLimitMessage: (max) => 'Max $max items — remove one first',
         maxVideoDuration: _limit15s ? const Duration(seconds: 15) : null,
         saveToGallery: _saveToGallery,
@@ -50,7 +58,7 @@ class _CameraDemoSectionState extends State<CameraDemoSection> {
         overlayBuilder: _customUi ? (_, _) => const _ThirdsGrid() : null,
       ),
     );
-    if (media != null && mounted) setState(() => _captures.add(media));
+    if (media != null && mounted) widget.onCaptured(media);
   }
 
   Widget _topBar(BuildContext context, CameraControls c) => Padding(
@@ -128,25 +136,25 @@ class _CameraDemoSectionState extends State<CameraDemoSection> {
             minimumSize: const Size.fromHeight(52),
           ),
         ),
-        if (_captures.isNotEmpty)
+        if (widget.captures.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Row(
               children: [
                 Text(
-                  'Captured (${_captures.length}) · selected '
-                  '${widget.pickedCount + _captures.length}'
+                  'Captured (${widget.captures.length}) · selected '
+                  '${widget.pickedCount + widget.captures.length}'
                   '${widget.maxSelection > 0 ? ' / ${widget.maxSelection}' : ''}',
                 ),
                 const Spacer(),
                 TextButton(
-                  onPressed: () => setState(_captures.clear),
+                  onPressed: widget.onClear,
                   child: const Text('Clear'),
                 ),
               ],
             ),
           ),
-        for (final media in _captures)
+        for (final media in widget.captures)
           ListTile(
             leading: media.isVideo
                 ? const Icon(Icons.videocam)

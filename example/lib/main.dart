@@ -82,6 +82,9 @@ class _DemoHomePageState extends State<DemoHomePage> {
 
   List<PickedMediaAsset> _picked = [];
 
+  /// Camera captures; they count toward the same max as gallery picks.
+  final List<CapturedMedia> _captures = [];
+
   /// Asks for photo/video access before opening the picker.
   ///
   /// The system dialog can only be raised while the status is still
@@ -167,6 +170,7 @@ class _DemoHomePageState extends State<DemoHomePage> {
       mediaFilter: _filter,
       fullScreenLeading: _leading,
       maxSelection: _maxSelection,
+      externalSelectedCount: _captures.length,
       gridCrossAxisCount: _gridColumns,
       enableSort: _enableSort,
       colors: colorsFor(_theme),
@@ -351,6 +355,9 @@ class _DemoHomePageState extends State<DemoHomePage> {
           CameraDemoSection(
             maxSelection: _maxSelection,
             pickedCount: _picked.length,
+            captures: _captures,
+            onCaptured: (m) => setState(() => _captures.add(m)),
+            onClear: () => setState(_captures.clear),
           ),
           const SizedBox(height: 24),
           if (_picked.isNotEmpty) ...[

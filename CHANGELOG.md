@@ -54,6 +54,9 @@
   `MediaPickerChannel.saveToGallery` add a file to the device gallery.
 * `CameraConfig.maxSelection` / `selectedCount` refuse captures once a shared
   selection limit is reached, with a configurable notice.
+* `MediaPickerConfig.externalSelectedCount` counts items held outside the
+  picker (e.g. camera captures) toward `maxSelection`; the header shows the
+  total.
 
 * Tapping past `maxSelection` now shows a notice inside the picker and the
   preview (an app's own SnackBar is hidden under the modal sheet). Customize it
