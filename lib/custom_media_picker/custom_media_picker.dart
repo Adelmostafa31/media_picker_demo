@@ -18,8 +18,10 @@
 library;
 
 export 'src/picker.dart';
-export 'src/picker_body.dart' show PickerBody, PickerAssetThumbnail;
-export 'src/picker_channel.dart' show MediaPickerChannel, PickerThumbnailCache;
+export 'src/picker_body.dart' show PickerBody;
+export 'src/picker_channel.dart'
+    show MediaPermissionStatus, MediaPickerChannel, PickerThumbnailCache;
 export 'src/picker_config.dart';
 export 'src/picker_models.dart';
 export 'src/picker_preview.dart' show PickerPreviewPage;
+export 'src/picker_thumbnail.dart' show PickerAssetThumbnail;

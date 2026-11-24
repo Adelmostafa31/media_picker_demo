@@ -1,3 +1,4 @@
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'picker_body.dart';
@@ -21,8 +22,8 @@ class CustomMediaPicker {
     BuildContext context, {
     MediaPickerConfig config = const MediaPickerConfig(),
   }) async {
-    final status = await MediaPickerChannel.requestPermission();
-    if (status == 'denied') {
+    final status = await MediaPickerChannel.requestPermissionStatus();
+    if (!status.hasAccess) {
       config.onPermissionDenied?.call();
       return null;
     }
@@ -32,10 +33,10 @@ class CustomMediaPicker {
     if (config.layoutStyle == LayoutStyle.fullScreen) {
       assets = await Navigator.of(context, rootNavigator: true)
           .push<List<PickedMediaAsset>>(
-        MaterialPageRoute(
-          builder: (_) => FullScreenPickerPage(config: config),
-        ),
-      );
+            MaterialPageRoute(
+              builder: (_) => FullScreenPickerPage(config: config),
+            ),
+          );
     } else {
       assets = await showModalBottomSheet<List<PickedMediaAsset>>(
         context: context,
@@ -102,7 +103,8 @@ class FullScreenPickerPage extends StatelessWidget {
         backgroundColor: c.appBar,
         elevation: 0,
         automaticallyImplyLeading: false,
-        leading: config.customLeading ??
+        leading:
+            config.customLeading ??
             IconButton(
               icon: Icon(
                 config.fullScreenLeading == FullScreenLeading.close
@@ -114,7 +116,8 @@ class FullScreenPickerPage extends StatelessWidget {
             ),
         title: Text(
           config.title ?? 'Select media',
-          style: config.titleStyle ??
+          style:
+              config.titleStyle ??
               TextStyle(
                 color: c.title,
                 fontSize: 17,
@@ -122,9 +125,7 @@ class FullScreenPickerPage extends StatelessWidget {
               ),
         ),
       ),
-      body: SafeArea(
-        child: PickerBody(config: config, showHeader: false),
-      ),
+      body: SafeArea(child: PickerBody(config: config, showHeader: false)),
     );
   }
 }

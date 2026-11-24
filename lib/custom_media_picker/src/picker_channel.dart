@@ -4,14 +4,54 @@ import 'package:flutter/services.dart';
 import 'picker_config.dart';
 import 'picker_models.dart';
 
-/// Dart <-> native bridge. Channel name must match the Kotlin/Swift side.
+/// Photo/video library access as reported by the OS.
+enum MediaPermissionStatus {
+  /// Full library access.
+  granted,
+
+  /// Access to a user-selected subset (iOS 14+ / Android 14+), or to only
+  /// one of images/videos on Android 13.
+  limited,
+
+  /// The system dialog has never been shown; [MediaPickerChannel.requestPermission]
+  /// will present it.
+  notDetermined,
+
+  /// Refused, but Android will still show the dialog again.
+  denied,
+
+  /// Refused for good (always the case on iOS after a refusal, and on
+  /// Android after "Don't ask again"). Only Settings can change it — see
+  /// [MediaPickerChannel.openAppSettings].
+  permanentlyDenied;
+
+  /// True for [granted] and [limited] — the picker can show media.
+  bool get hasAccess => this == granted || this == limited;
+
+  /// The 0.1.x string for this status.
+  String get _legacyName => switch (this) {
+    permanentlyDenied => 'denied',
+    _ => name,
+  };
+
+  static MediaPermissionStatus parse(String? raw) => switch (raw) {
+    'granted' => granted,
+    'limited' => limited,
+    'notDetermined' => notDetermined,
+    'permanentlyDenied' => permanentlyDenied,
+    _ => denied,
+  };
+}
+
+/// Dart <-> native bridge. Channel names must match the plugin classes.
 class MediaPickerChannel {
   MediaPickerChannel._();
 
   static const MethodChannel _channel = MethodChannel('custom_media_picker');
 
-  static const EventChannel _changesChannel =
-      EventChannel('custom_media_picker/gallery_changes');
+  static const EventChannel _changesChannel = EventChannel(
+    'custom_media_picker/gallery_changes',
+  );
 
   /// The native side only ships for Android and iOS; every other platform has
   /// no plugin registered, so touching the channels there fails.
@@ -20,67 +60,82 @@ class MediaPickerChannel {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  /// Emits whenever the OS reports a change in the user's photo library.
+  /// Emits (debounced on the native side) whenever the OS reports a change in
+  /// the user's photo library. On iOS it only emits once access is granted.
   ///
-  /// Returns an empty stream on unsupported platforms: activating an event
-  /// channel with no native implementation throws a MissingPluginException
-  /// that `EventChannel` reports through `FlutterError.reportError`, so it
-  /// cannot be caught by the subscriber.
+  /// Empty on unsupported platforms: activating an event channel with no
+  /// native implementation reports an uncatchable MissingPluginException.
   static Stream<void> get galleryChanges => isSupported
       ? _changesChannel.receiveBroadcastStream().map((_) {})
       : const Stream<void>.empty();
 
-  static String _filterToType(MediaFilter f) {
-    switch (f) {
-      case MediaFilter.onlyImages:
-        return 'image';
-      case MediaFilter.onlyVideos:
-        return 'video';
-      case MediaFilter.all:
-        return 'all';
-    }
+  static String _filterToType(MediaFilter f) => switch (f) {
+    MediaFilter.onlyImages => 'image',
+    MediaFilter.onlyVideos => 'video',
+    MediaFilter.all => 'all',
+  };
+
+  static Future<T?> _invoke<T>(String method, [Object? args]) async {
+    if (!isSupported) return null;
+    return _channel.invokeMethod<T>(method, args);
   }
 
-  /// Non-interactive check — returns the current permission status without
-  /// showing a system dialog.
-  ///
-  /// One of 'granted', 'limited', 'notDetermined' or 'denied'.
-  /// 'notDetermined' means the OS dialog has never been shown, so
-  /// [requestPermission] will present it; 'denied' on iOS means the user
-  /// already refused once and only Settings can change it — see
-  /// [openAppSettings].
-  static Future<String> checkPermission() async {
+  /// Current status, without showing any system dialog.
+  static Future<MediaPermissionStatus> checkPermissionStatus() async {
     try {
-      final res = await _channel.invokeMethod<String>('checkPermission');
-      return res ?? 'denied';
+      return MediaPermissionStatus.parse(
+        await _invoke<String>('checkPermission'),
+      );
     } on PlatformException {
-      return 'denied';
+      return MediaPermissionStatus.denied;
     } on MissingPluginException {
-      return 'denied';
+      return MediaPermissionStatus.denied;
     }
   }
 
-  /// Shows the system photo/video access dialog when the status is still
-  /// undetermined, and returns 'granted', 'limited' (iOS 14+/Android 14
-  /// partial) or 'denied'.
-  static Future<String> requestPermission() async {
+  /// Shows the system dialog when the OS still allows it and returns the
+  /// resulting status. Concurrent calls share the same dialog and answer.
+  static Future<MediaPermissionStatus> requestPermissionStatus() =>
+      _pendingRequest ??= _requestPermission().whenComplete(() {
+        _pendingRequest = null;
+      });
+
+  static Future<MediaPermissionStatus>? _pendingRequest;
+
+  static Future<MediaPermissionStatus> _requestPermission() async {
     try {
-      final res = await _channel.invokeMethod<String>('requestPermission');
-      return res ?? 'denied';
+      return MediaPermissionStatus.parse(
+        await _invoke<String>('requestPermission'),
+      );
     } on PlatformException {
-      return 'denied';
+      return MediaPermissionStatus.denied;
     } on MissingPluginException {
-      return 'denied';
+      return MediaPermissionStatus.denied;
     }
   }
 
-  /// Opens this app's page in the system Settings so the user can flip the
-  /// photo/video toggle after a hard denial. Returns false when the native
-  /// side is unavailable.
+  /// 0.1.x API: `'granted' | 'limited' | 'notDetermined' | 'denied'`.
+  /// `permanentlyDenied` is reported as `'denied'`, as before.
+  @Deprecated(
+    'Use checkPermissionStatus(), which returns a MediaPermissionStatus and '
+    'tells denied apart from permanentlyDenied. Removed in 1.0.0.',
+  )
+  static Future<String> checkPermission() async =>
+      (await checkPermissionStatus())._legacyName;
+
+  /// 0.1.x API: `'granted' | 'limited' | 'denied'`.
+  @Deprecated(
+    'Use requestPermissionStatus(), which returns a MediaPermissionStatus and '
+    'tells denied apart from permanentlyDenied. Removed in 1.0.0.',
+  )
+  static Future<String> requestPermission() async =>
+      (await requestPermissionStatus())._legacyName;
+
+  /// Opens this app's page in the system Settings. Returns false when the
+  /// native side is unavailable.
   static Future<bool> openAppSettings() async {
     try {
-      final res = await _channel.invokeMethod<bool>('openAppSettings');
-      return res ?? false;
+      return await _invoke<bool>('openAppSettings') ?? false;
     } on PlatformException {
       return false;
     } on MissingPluginException {
@@ -88,11 +143,12 @@ class MediaPickerChannel {
     }
   }
 
-  /// Pass [albumId] to fetch a single album's assets ("Albums" tab);
-  /// leave it null for the global feed ("Recent" tab). [ascending] and the
-  /// [startDateSec]/[endDateSec] window (unix seconds, inclusive) only make
-  /// sense for the Recent feed's sort control — albums are always
-  /// newest-first.
+  /// Pass [albumId] to fetch a single album's assets ("Albums" tab); leave it
+  /// null for the global feed ("Recent" tab). [ascending] and the
+  /// [startDateSec]/[endDateSec] window (unix seconds, inclusive, on the
+  /// capture date) are used by the Recent feed's sort control.
+  /// [includeNames] can be false when file names aren't displayed — looking
+  /// them up is slow on iOS.
   static Future<List<PickedMediaAsset>> getAssets({
     required MediaFilter filter,
     required int page,
@@ -101,8 +157,9 @@ class MediaPickerChannel {
     bool ascending = false,
     int? startDateSec,
     int? endDateSec,
+    bool includeNames = true,
   }) async {
-    final raw = await _channel.invokeMethod<List<dynamic>>('getAssets', {
+    final raw = await _invoke<List<Object?>>('getAssets', {
       'type': _filterToType(filter),
       'page': page,
       'pageSize': pageSize,
@@ -110,25 +167,28 @@ class MediaPickerChannel {
       'ascending': ascending,
       'startDate': startDateSec,
       'endDate': endDateSec,
+      'includeNames': includeNames,
     });
     if (raw == null) return const [];
-    return raw
-        .map((e) => PickedMediaAsset.fromMap(e as Map<dynamic, dynamic>))
-        .toList();
+    return [
+      for (final e in raw)
+        if (e is Map) PickedMediaAsset.fromMap(e),
+    ];
   }
 
-  /// Albums (buckets / PHAssetCollections) that contain at least one
-  /// asset matching [filter], newest cover first.
+  /// Albums (buckets / PHAssetCollections) that contain at least one asset
+  /// matching [filter], newest cover first.
   static Future<List<MediaAlbum>> getAlbums({
     required MediaFilter filter,
   }) async {
-    final raw = await _channel.invokeMethod<List<dynamic>>('getAlbums', {
+    final raw = await _invoke<List<Object?>>('getAlbums', {
       'type': _filterToType(filter),
     });
     if (raw == null) return const [];
-    return raw
-        .map((e) => MediaAlbum.fromMap(e as Map<dynamic, dynamic>))
-        .toList();
+    return [
+      for (final e in raw)
+        if (e is Map) MediaAlbum.fromMap(e),
+    ];
   }
 
   /// JPEG bytes of a square thumbnail (native side decodes + scales).
@@ -136,24 +196,30 @@ class MediaPickerChannel {
     required String id,
     required String type,
     required int size,
-  }) {
-    return _channel.invokeMethod<Uint8List>('getThumbnail', {
-      'id': id,
-      'type': type,
-      'size': size,
-    });
-  }
+  }) => _invoke<Uint8List>('getThumbnail', {
+    'id': id,
+    'type': type,
+    'size': size,
+  });
 
-  /// Absolute path of the original file (may copy to cache/tmp on
-  /// first call — iOS iCloud assets, Android scoped-storage fallback).
+  /// Absolute path of a readable copy of the original file. The native side
+  /// may copy it into the app's cache (iCloud assets, scoped storage); copies
+  /// older than a day are purged automatically, or call [clearCache].
   static Future<String?> getOriginalPath({
     required String id,
     required String type,
-  }) {
-    return _channel.invokeMethod<String>('getOriginalPath', {
-      'id': id,
-      'type': type,
-    });
+  }) => _invoke<String>('getOriginalPath', {'id': id, 'type': type});
+
+  /// Deletes every file copy the plugin made in the app's cache/tmp folder.
+  /// Paths returned earlier stop being valid.
+  static Future<void> clearCache() async {
+    try {
+      await _invoke<void>('clearCache');
+    } on PlatformException {
+      // Nothing to clean up, or not cleanable — not worth surfacing.
+    } on MissingPluginException {
+      // Unsupported platform.
+    }
   }
 }
 
@@ -164,7 +230,10 @@ class PickerThumbnailCache {
   static final Map<String, Uint8List> _cache = <String, Uint8List>{};
 
   /// Tune this to your memory budget (256px JPEG ≈ 15–40 KB each).
+  /// Lowering it trims the cache on the next [put].
   static int maxEntries = 300;
+
+  static int get length => _cache.length;
 
   static Uint8List? get(String key) {
     final v = _cache.remove(key);
@@ -173,10 +242,11 @@ class PickerThumbnailCache {
   }
 
   static void put(String key, Uint8List bytes) {
-    if (_cache.length >= maxEntries && _cache.isNotEmpty) {
+    _cache.remove(key);
+    while (_cache.isNotEmpty && _cache.length >= maxEntries) {
       _cache.remove(_cache.keys.first);
     }
-    _cache[key] = bytes;
+    if (maxEntries > 0) _cache[key] = bytes;
   }
 
   static void clear() => _cache.clear();

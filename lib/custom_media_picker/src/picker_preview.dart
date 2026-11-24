@@ -1,11 +1,14 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 // The ONLY external dependency, used solely for video playback here.
 // If you never enable preview for videos you can delete this file and
 // set `enablePreview: false` in the config.
 import 'package:video_player/video_player.dart';
 
+import 'picker_channel.dart';
 import 'picker_config.dart';
 import 'picker_models.dart';
 
@@ -35,6 +38,7 @@ class PickerPreviewPage extends StatefulWidget {
 
 class _PickerPreviewPageState extends State<PickerPreviewPage> {
   String? _path;
+  Uint8List? _decodedImage;
   bool _failed = false;
   late bool _selected = widget.initiallySelected;
   VideoPlayerController? _controller;
@@ -46,28 +50,49 @@ class _PickerPreviewPageState extends State<PickerPreviewPage> {
   }
 
   Future<void> _load() async {
-    final path = await widget.asset.resolvePath();
-    if (!mounted) return;
-    if (path == null) {
-      setState(() => _failed = true);
-      return;
-    }
-    if (widget.asset.isVideo) {
-      final controller = VideoPlayerController.file(File(path));
-      try {
+    VideoPlayerController? controller;
+    try {
+      final path = await widget.asset.resolvePath();
+      if (!mounted) return;
+      if (path == null) {
+        setState(() => _failed = true);
+        return;
+      }
+      if (widget.asset.isVideo) {
+        controller = VideoPlayerController.file(File(path));
         await controller.initialize();
-      } catch (_) {
-        if (mounted) setState(() => _failed = true);
-        return;
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        _controller = controller;
+        controller.play();
+      } else if (_needsNativeDecode(path)) {
+        _decodedImage = await MediaPickerChannel.getThumbnail(
+          id: widget.asset.id,
+          type: widget.asset.typeString,
+          size: _nativePreviewSize,
+        ).catchError((Object _) => null);
+        if (!mounted) return;
       }
-      if (!mounted) {
-        controller.dispose();
-        return;
+      setState(() => _path = path);
+    } catch (_) {
+      // Channel error, unreadable file or unsupported codec.
+      if (controller != null && !identical(controller, _controller)) {
+        await controller.dispose();
       }
-      _controller = controller;
-      controller.play();
+      if (mounted) setState(() => _failed = true);
     }
-    setState(() => _path = path);
+  }
+
+  static const _nativePreviewSize = 2048;
+
+  /// Flutter's Android decoder renders HEIC/HEIF with the wrong EXIF rotation,
+  /// so those are shown from a natively decoded, correctly rotated copy.
+  static bool _needsNativeDecode(String path) {
+    if (!Platform.isAndroid) return false;
+    final p = path.toLowerCase();
+    return p.endsWith('.heic') || p.endsWith('.heif');
   }
 
   @override
@@ -94,11 +119,14 @@ class _PickerPreviewPageState extends State<PickerPreviewPage> {
         backgroundColor: const Color(0x66000000),
         elevation: 0,
         leading: IconButton(
+          tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
           icon: const Icon(Icons.close, color: Color(0xFFFFFFFF)),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
+            tooltip: MaterialLocalizations.of(context)
+                .selectedRowCountTitle(_selected ? 1 : 0),
             onPressed: () {
               final nowSelected = widget.onToggle();
               setState(() => _selected = nowSelected);
@@ -129,7 +157,15 @@ class _PickerPreviewPageState extends State<PickerPreviewPage> {
     if (!widget.asset.isVideo) {
       return InteractiveViewer(
         maxScale: 5,
-        child: Center(child: Image.file(File(path))),
+        child: Center(
+          child: switch (_decodedImage) {
+            // MediaStore may cap the size; scale up to fill like Image.file.
+            final bytes? => SizedBox.expand(
+              child: Image.memory(bytes, fit: BoxFit.contain),
+            ),
+            null => Image.file(File(path)),
+          },
+        ),
       );
     }
 
@@ -153,7 +189,7 @@ class _PickerPreviewPageState extends State<PickerPreviewPage> {
           ),
           AnimatedBuilder(
             animation: controller,
-            builder: (_, __) => controller.value.isPlaying
+            builder: (_, _) => controller.value.isPlaying
                 ? const SizedBox.shrink()
                 : const Icon(
                     Icons.play_circle_fill,
@@ -161,9 +197,9 @@ class _PickerPreviewPageState extends State<PickerPreviewPage> {
                     size: 64,
                   ),
           ),
-          Positioned(
-            left: 16,
-            right: 16,
+          PositionedDirectional(
+            start: 16,
+            end: 16,
             bottom: 24,
             child: VideoProgressIndicator(
               controller,

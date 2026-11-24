@@ -295,6 +295,19 @@ class MediaPickerConfig {
   final String emptyText;
   final TextStyle? emptyTextStyle;
 
+  /// Shown instead of [emptyText] when loading the gallery failed.
+  final String errorText;
+
+  /// Label of the retry button under [errorText].
+  final String retryLabel;
+
+  /// List-layout title fallback when the OS reports no file name.
+  final String photoLabel;
+  final String videoLabel;
+
+  /// Album name fallback when the OS reports none.
+  final String unknownAlbumLabel;
+
   /// Base label for the confirm button when nothing is selected.
   final String confirmLabel;
 
@@ -317,6 +330,11 @@ class MediaPickerConfig {
   /// Called after the picker closes with a confirmed selection. Use this to
   /// refocus your text input so the keyboard comes back up.
   final VoidCallback? onFocused;
+
+  /// Called on confirm (with [resolvePathsOnConfirm]) for selected assets
+  /// whose file could not be resolved — e.g. an iCloud download failed or the
+  /// asset was deleted. Those assets are left out of the returned list.
+  final void Function(List<PickedMediaAsset> unavailable)? onAssetsUnavailable;
 
   const MediaPickerConfig({
     this.layoutStyle = LayoutStyle.sheet,
@@ -364,6 +382,11 @@ class MediaPickerConfig {
     this.confirmTextStyle,
     this.emptyText = 'No media found',
     this.emptyTextStyle,
+    this.errorText = "Couldn't load your media",
+    this.retryLabel = 'Retry',
+    this.photoLabel = 'Photo',
+    this.videoLabel = 'Video',
+    this.unknownAlbumLabel = 'Unknown',
     this.confirmLabel = 'Confirm',
     this.confirmLabelBuilder,
     this.selectionBadgeSize = 22,
@@ -373,7 +396,18 @@ class MediaPickerConfig {
     this.onSelectionLimitReached,
     this.onPermissionDenied,
     this.onFocused,
-  });
+    this.onAssetsUnavailable,
+  }) : assert(
+         0 < sheetMinHeight &&
+             sheetMinHeight <= sheetInitialHeight &&
+             sheetInitialHeight <= sheetMaxHeight &&
+             sheetMaxHeight <= 1,
+         'Sheet heights must satisfy 0 < min <= initial <= max <= 1',
+       ),
+       assert(gridCrossAxisCount > 0, 'gridCrossAxisCount must be > 0'),
+       assert(pageSize > 0, 'pageSize must be > 0'),
+       assert(maxSelection >= 0, 'maxSelection must be >= 0 (0 = unlimited)'),
+       assert(thumbnailSize > 0, 'thumbnailSize must be > 0');
 
   MediaPickerConfig copyWith({
     LayoutStyle? layoutStyle,
@@ -421,6 +455,11 @@ class MediaPickerConfig {
     TextStyle? confirmTextStyle,
     String? emptyText,
     TextStyle? emptyTextStyle,
+    String? errorText,
+    String? retryLabel,
+    String? photoLabel,
+    String? videoLabel,
+    String? unknownAlbumLabel,
     String? confirmLabel,
     String Function(int)? confirmLabelBuilder,
     double? selectionBadgeSize,
@@ -430,6 +469,7 @@ class MediaPickerConfig {
     VoidCallback? onSelectionLimitReached,
     VoidCallback? onPermissionDenied,
     VoidCallback? onFocused,
+    void Function(List<PickedMediaAsset>)? onAssetsUnavailable,
   }) {
     return MediaPickerConfig(
       layoutStyle: layoutStyle ?? this.layoutStyle,
@@ -478,6 +518,11 @@ class MediaPickerConfig {
       confirmTextStyle: confirmTextStyle ?? this.confirmTextStyle,
       emptyText: emptyText ?? this.emptyText,
       emptyTextStyle: emptyTextStyle ?? this.emptyTextStyle,
+      errorText: errorText ?? this.errorText,
+      retryLabel: retryLabel ?? this.retryLabel,
+      photoLabel: photoLabel ?? this.photoLabel,
+      videoLabel: videoLabel ?? this.videoLabel,
+      unknownAlbumLabel: unknownAlbumLabel ?? this.unknownAlbumLabel,
       confirmLabel: confirmLabel ?? this.confirmLabel,
       confirmLabelBuilder: confirmLabelBuilder ?? this.confirmLabelBuilder,
       selectionBadgeSize: selectionBadgeSize ?? this.selectionBadgeSize,
@@ -488,6 +533,7 @@ class MediaPickerConfig {
           onSelectionLimitReached ?? this.onSelectionLimitReached,
       onPermissionDenied: onPermissionDenied ?? this.onPermissionDenied,
       onFocused: onFocused ?? this.onFocused,
+      onAssetsUnavailable: onAssetsUnavailable ?? this.onAssetsUnavailable,
     );
   }
 }

@@ -1,6 +1,8 @@
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'picker_config.dart';
+import 'picker_sort.dart' show pickerLocalizations;
 
 /// Opens the picker's own date-range selector (used by the Recent tab's
 /// "Custom range" sort option).
@@ -52,19 +54,12 @@ class _MediaDateRangeSheet extends StatefulWidget {
 }
 
 class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
-  static const _monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June', //
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-  static const _monthAbbrs = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-  static const _weekdayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   static const _rowHeight = 42.0;
 
-  late final DateTime _firstMonth =
-      DateTime(widget.firstDate.year, widget.firstDate.month);
+  late final DateTime _firstMonth = DateTime(
+    widget.firstDate.year,
+    widget.firstDate.month,
+  );
   late final DateTime _firstDay = _dayOnly(widget.firstDate);
   late final DateTime _lastDay = _dayOnly(widget.lastDate);
   late final int _pageCount =
@@ -140,13 +135,16 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
         .pop(DateTimeRange(start: start, end: _rangeEnd ?? start));
   }
 
-  String _shortDate(DateTime d) => '${d.day} ${_monthAbbrs[d.month - 1]}';
+  String _shortDate(DateTime d) =>
+      pickerLocalizations(context).formatShortMonthDay(d);
 
   String _headerLabel() {
-    final start =
-        _rangeStart == null ? config.dateRangeStartLabel : _shortDate(_rangeStart!);
-    final end =
-        _rangeEnd == null ? config.dateRangeEndLabel : _shortDate(_rangeEnd!);
+    final start = _rangeStart == null
+        ? config.dateRangeStartLabel
+        : _shortDate(_rangeStart!);
+    final end = _rangeEnd == null
+        ? config.dateRangeEndLabel
+        : _shortDate(_rangeEnd!);
     return '$start - $end';
   }
 
@@ -187,7 +185,7 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
 
   Widget _buildActionBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+      padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 12, 8),
       child: Row(
         children: [
           IconButton(
@@ -215,8 +213,9 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
             child: Text(
               config.dateRangeSaveLabel,
               style: TextStyle(
-                color: _selectedFill
-                    .withValues(alpha: _rangeStart == null ? 0.5 : 1),
+                color: _selectedFill.withValues(
+                  alpha: _rangeStart == null ? 0.5 : 1,
+                ),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -234,13 +233,12 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
         children: [
           IconButton(
             icon: Icon(Icons.chevron_left, color: c.icon),
-            onPressed:
-                _pageIndex > 0 ? () => _goToPage(_pageIndex - 1) : null,
+            onPressed: _pageIndex > 0 ? () => _goToPage(_pageIndex - 1) : null,
           ),
           Expanded(
             child: Center(
               child: Text(
-                '${_monthNames[month.month - 1]} ${month.year}',
+                pickerLocalizations(context).formatMonthYear(month),
                 style: TextStyle(
                   color: c.text,
                   fontSize: 15,
@@ -261,18 +259,25 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
   }
 
   Widget _buildWeekdayRow() {
+    final l10n = pickerLocalizations(context);
+    final first = l10n.firstDayOfWeekIndex;
+    final labels = [
+      for (var i = 0; i < 7; i++) l10n.narrowWeekdays[(first + i) % 7],
+    ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
-        children: _weekdayLabels
-            .map((l) => Expanded(
-                  child: Center(
-                    child: Text(
-                      l,
-                      style: TextStyle(color: c.secondaryText, fontSize: 12),
-                    ),
+        children: labels
+            .map(
+              (l) => Expanded(
+                child: Center(
+                  child: Text(
+                    l,
+                    style: TextStyle(color: c.secondaryText, fontSize: 12),
                   ),
-                ))
+                ),
+              ),
+            )
             .toList(),
       ),
     );
@@ -281,8 +286,9 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
   /// Always 6 rows so every month page is the same height while paging.
   Widget _buildMonthGrid(DateTime month) {
     final firstOfMonth = DateTime(month.year, month.month, 1);
-    final leading = firstOfMonth.weekday % 7; // Sunday = 0
-    final gridStart = firstOfMonth.subtract(Duration(days: leading));
+    final firstDay = pickerLocalizations(context).firstDayOfWeekIndex;
+    // DateTime.weekday: Mon = 1 .. Sun = 7; firstDayOfWeekIndex: Sun = 0.
+    final leading = (firstOfMonth.weekday - firstDay) % 7;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -291,7 +297,13 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
           return Expanded(
             child: Row(
               children: List.generate(7, (col) {
-                final date = gridStart.add(Duration(days: row * 7 + col));
+                // Calendar fields, not Duration: adding 24h blocks skips or
+                // repeats a day when the month crosses a DST change.
+                final date = DateTime(
+                  month.year,
+                  month.month,
+                  1 - leading + row * 7 + col,
+                );
                 return Expanded(
                   child: date.month == month.month
                       ? _dayCell(date)
@@ -310,10 +322,12 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
     final enabled = !day.isBefore(_firstDay) && !day.isAfter(_lastDay);
     final isStart = _rangeStart != null && _sameDay(day, _rangeStart!);
     final isEnd = _rangeEnd != null && _sameDay(day, _rangeEnd!);
-    final hasRange = _rangeStart != null &&
+    final hasRange =
+        _rangeStart != null &&
         _rangeEnd != null &&
         !_sameDay(_rangeStart!, _rangeEnd!);
-    final inRange = _rangeStart != null &&
+    final inRange =
+        _rangeStart != null &&
         _rangeEnd != null &&
         day.isAfter(_rangeStart!) &&
         day.isBefore(_rangeEnd!);
@@ -356,12 +370,13 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
                 color: !enabled
                     ? c.secondaryText.withValues(alpha: 0.4)
                     : (isStart || isEnd)
-                        ? c.dateRangeHeaderText
-                        : inRange
-                            ? c.dateRangeRangeText
-                            : c.text,
-                fontWeight:
-                    (isStart || isEnd) ? FontWeight.w700 : FontWeight.normal,
+                    ? c.dateRangeHeaderText
+                    : inRange
+                    ? c.dateRangeRangeText
+                    : c.text,
+                fontWeight: (isStart || isEnd)
+                    ? FontWeight.w700
+                    : FontWeight.normal,
               ),
             ),
           ),

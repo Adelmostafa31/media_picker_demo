@@ -1,23 +1,14 @@
-import 'dart:typed_data';
-
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'picker_channel.dart';
 import 'picker_config.dart';
 import 'picker_date_range.dart';
+import 'picker_feed.dart';
 import 'picker_models.dart';
 import 'picker_preview.dart';
-
-/// One independently-paged asset feed (Recent, or a single album).
-class _PagedAssets {
-  final String? albumId; // null = global "Recent" feed
-  final List<PickedMediaAsset> items = [];
-  int page = 0;
-  bool hasMore = true;
-  bool loading = false;
-
-  _PagedAssets({this.albumId});
-}
+import 'picker_sort.dart';
+import 'picker_tiles.dart';
 
 /// Shared body used by both the sheet and the full-screen layouts.
 /// Handles the Recent/Albums tabs, paging, selection state,
@@ -39,14 +30,15 @@ class PickerBody extends StatefulWidget {
 }
 
 class _PickerBodyState extends State<PickerBody> {
-  final _PagedAssets _recent = _PagedAssets();
-  _PagedAssets? _albumFeed; // feed of the currently opened album
+  late final PagedAssets _recent = PagedAssets(pageSize: config.pageSize);
+  PagedAssets? _albumFeed; // feed of the currently opened album
 
   final List<PickedMediaAsset> _selected = [];
 
   List<MediaAlbum> _albums = const [];
   bool _albumsLoading = false;
   bool _albumsFetched = false;
+  bool _albumsFailed = false;
 
   int _tab = 0; // 0 = Recent, 1 = Albums
   MediaAlbum? _openAlbum;
@@ -63,77 +55,67 @@ class _PickerBodyState extends State<PickerBody> {
   void initState() {
     super.initState();
     _sortOrder = config.initialSortOrder;
-    final initial = config.initialSelection;
-    if (initial != null && initial.isNotEmpty) {
-      _selected.addAll(initial);
-    }
+    final initial = config.initialSelection ?? const [];
+    final max = config.maxSelection;
+    // Never start above the limit, otherwise the header shows e.g. "12 / 9".
+    _selected.addAll(max > 0 ? initial.take(max) : initial);
     _loadMore(_recent);
   }
 
   // -------------------------------------------------------------- loading
 
-  Future<void> _loadMore(_PagedAssets feed) async {
-    if (feed.loading || !feed.hasMore) return;
-    setState(() => feed.loading = true);
+  Future<void> _loadMore(PagedAssets feed) async {
     // Sorting only applies to the global Recent feed, never to an album.
     final isRecent = feed.albumId == null;
     final range = isRecent ? _dateRange : null;
-    try {
-      final items = await MediaPickerChannel.getAssets(
+    final ascending = isRecent && _sortOrder == MediaSortOrder.oldestFirst;
+    await feed.loadNext(
+      (page) => MediaPickerChannel.getAssets(
         filter: config.mediaFilter,
-        page: feed.page,
+        page: page,
         pageSize: config.pageSize,
         albumId: feed.albumId,
-        ascending: isRecent && _sortOrder == MediaSortOrder.oldestFirst,
-        startDateSec:
-            range == null ? null : range.start.millisecondsSinceEpoch ~/ 1000,
-        endDateSec: range == null
-            ? null
-            : _endOfDay(range.end).millisecondsSinceEpoch ~/ 1000,
-      );
-      if (!mounted) return;
-      setState(() {
-        feed.items.addAll(items);
-        feed.hasMore = items.length == config.pageSize;
-        feed.page++;
-        feed.loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        feed.loading = false;
-        feed.hasMore = false;
-      });
-    }
+        ascending: ascending,
+        startDateSec: range == null ? null : _toSec(range.start),
+        endDateSec: range == null ? null : _toSec(_endOfDay(range.end)),
+        // Names are only shown by the list layout and are slow on iOS.
+        includeNames: config.listStyle == ListStyle.listView,
+      ),
+      onChange: () {
+        if (mounted) setState(() {});
+      },
+    );
   }
+
+  static int _toSec(DateTime d) => d.millisecondsSinceEpoch ~/ 1000;
 
   static DateTime _endOfDay(DateTime d) =>
       DateTime(d.year, d.month, d.day, 23, 59, 59);
 
-  /// Clears items/paging so the next [_loadMore] re-fetches from page 0
-  /// under the current sort.
-  void _resetFeed(_PagedAssets feed) {
-    feed.items.clear();
-    feed.page = 0;
-    feed.hasMore = true;
-  }
-
-  Future<void> _loadAlbums() async {
-    if (_albumsLoading || _albumsFetched) return;
-    setState(() => _albumsLoading = true);
+  Future<void> _loadAlbums({bool force = false}) async {
+    if (_albumsLoading || (_albumsFetched && !force)) return;
+    setState(() {
+      _albumsLoading = true;
+      _albumsFailed = false;
+    });
     try {
-      final albums =
-          await MediaPickerChannel.getAlbums(filter: config.mediaFilter);
+      final albums = await MediaPickerChannel.getAlbums(
+        filter: config.mediaFilter,
+      );
       if (!mounted) return;
       setState(() {
         _albums = albums;
         _albumsFetched = true;
         _albumsLoading = false;
       });
-    } catch (_) {
+    } catch (e, s) {
+      debugPrintStack(
+        label: 'custom_media_picker: getAlbums failed: $e',
+        stackTrace: s,
+      );
       if (!mounted) return;
       setState(() {
-        _albumsFetched = true;
+        _albumsFailed = true;
         _albumsLoading = false;
       });
     }
@@ -141,17 +123,19 @@ class _PickerBodyState extends State<PickerBody> {
 
   // ------------------------------------------------------------------ sort
 
+  void _reloadRecent() {
+    _recent.reset();
+    _loadMore(_recent);
+  }
+
   void _applySort(MediaSortOrder order) {
     if (order == _sortOrder && order != MediaSortOrder.dateRange) return;
     setState(() {
       _sortOrder = order;
       if (order != MediaSortOrder.dateRange) _dateRange = null;
     });
-    _resetFeed(_recent);
-    _loadMore(_recent);
+    _reloadRecent();
   }
-
-  void _clearDateRange() => _applySort(MediaSortOrder.newestFirst);
 
   Future<void> _pickDateRange() async {
     final result = await showMediaDateRangePicker(
@@ -166,91 +150,20 @@ class _PickerBodyState extends State<PickerBody> {
       _dateRange = result;
       _sortOrder = MediaSortOrder.dateRange;
     });
-    _resetFeed(_recent);
-    _loadMore(_recent);
+    _reloadRecent();
   }
 
   Future<void> _showSortSheet() async {
-    final choice = await showModalBottomSheet<MediaSortOrder>(
+    final choice = await showPickerSortSheet(
       context: context,
-      backgroundColor: c.background,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(config.sheetCornerRadius),
-        ),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            _sortOptionTile(
-              MediaSortOrder.newestFirst,
-              config.sortNewToOldLabel,
-            ),
-            _sortOptionTile(
-              MediaSortOrder.oldestFirst,
-              config.sortOldToNewLabel,
-            ),
-            _sortOptionTile(
-              MediaSortOrder.dateRange,
-              config.sortDateRangeLabel,
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+      config: config,
+      current: _sortOrder,
     );
-    if (choice == null) return;
+    if (choice == null || !mounted) return;
     if (choice == MediaSortOrder.dateRange) {
       await _pickDateRange();
     } else {
       _applySort(choice);
-    }
-  }
-
-  Widget _sortOptionTile(MediaSortOrder order, String label) {
-    final selected = order == _sortOrder;
-    return InkWell(
-      onTap: () => Navigator.of(context).pop(order),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: selected ? c.sortAccent : c.text,
-                  fontSize: 15,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-            ),
-            if (selected) Icon(Icons.check, size: 18, color: c.sortAccent),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static const _monthAbbrs = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-
-  String _formatDate(DateTime d) => '${d.day} ${_monthAbbrs[d.month - 1]}';
-
-  String _currentSortLabel() {
-    switch (_sortOrder) {
-      case MediaSortOrder.oldestFirst:
-        return config.sortOldToNewLabel;
-      case MediaSortOrder.newestFirst:
-        return config.sortNewToOldLabel;
-      case MediaSortOrder.dateRange:
-        final r = _dateRange;
-        if (r == null) return config.sortDateRangeLabel;
-        return '${_formatDate(r.start)} – ${_formatDate(r.end)}';
     }
   }
 
@@ -261,11 +174,12 @@ class _PickerBodyState extends State<PickerBody> {
   }
 
   void _openAlbumFeed(MediaAlbum album) {
+    final feed = PagedAssets(albumId: album.id, pageSize: config.pageSize);
     setState(() {
       _openAlbum = album;
-      _albumFeed = _PagedAssets(albumId: album.id);
+      _albumFeed = feed;
     });
-    _loadMore(_albumFeed!);
+    _loadMore(feed);
   }
 
   void _closeAlbumFeed() {
@@ -277,8 +191,7 @@ class _PickerBodyState extends State<PickerBody> {
 
   // ------------------------------------------------------------ selection
 
-  int _selectionIndexOf(PickedMediaAsset a) =>
-      _selected.indexWhere((e) => e.id == a.id);
+  int _selectionIndexOf(PickedMediaAsset a) => _selected.indexOf(a);
 
   /// Toggles selection. Returns whether the asset is selected AFTER the
   /// call (used by the preview page to stay in sync with the max limit).
@@ -299,7 +212,7 @@ class _PickerBodyState extends State<PickerBody> {
   Future<void> _openPreview(PickedMediaAsset a) async {
     if (!config.enablePreview) return;
     await Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => PickerPreviewPage(
           asset: a,
           config: config,
@@ -313,27 +226,51 @@ class _PickerBodyState extends State<PickerBody> {
 
   Future<void> _confirm() async {
     if (_selected.isEmpty || _confirming) return;
+    var result = List<PickedMediaAsset>.of(_selected);
     if (config.resolvePathsOnConfirm) {
       setState(() => _confirming = true);
-      for (final a in _selected) {
-        await a.resolvePath();
+      try {
+        final paths = await Future.wait(
+          result.map((a) => a.resolvePath().catchError((Object _) => null)),
+        );
+        final unavailable = [
+          for (var i = 0; i < result.length; i++)
+            if (paths[i] == null) result[i],
+        ];
+        if (unavailable.isNotEmpty) {
+          config.onAssetsUnavailable?.call(unavailable);
+          result = [
+            for (var i = 0; i < result.length; i++)
+              if (paths[i] != null) result[i],
+          ];
+        }
+      } finally {
+        if (mounted) setState(() => _confirming = false);
       }
       if (!mounted) return;
     }
-    Navigator.of(context).pop(List<PickedMediaAsset>.from(_selected));
+    Navigator.of(context).pop(result);
   }
 
   // ---------------------------------------------------------------- build
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        if (widget.showHeader) _buildHeader(),
-        if (config.enableAlbums) _buildTabBar(),
-        Expanded(child: _buildContent()),
-        _buildConfirmBar(),
-      ],
+    // System/predictive back inside an album returns to the album list
+    // instead of closing the picker and dropping the selection.
+    return PopScope<Object?>(
+      canPop: _openAlbum == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _openAlbum != null) _closeAlbumFeed();
+      },
+      child: Column(
+        children: [
+          if (widget.showHeader) _buildHeader(),
+          if (config.enableAlbums) _buildTabBar(),
+          Expanded(child: _buildContent()),
+          _buildConfirmBar(),
+        ],
+      ),
     );
   }
 
@@ -341,61 +278,26 @@ class _PickerBodyState extends State<PickerBody> {
     if (_tab == 0) {
       return Column(
         children: [
-          _buildSortRow(),
+          if (config.enableSort)
+            PickerSortRow(
+              config: config,
+              sortOrder: _sortOrder,
+              dateRange: _dateRange,
+              onTap: _showSortSheet,
+              onClearRange: () => _applySort(MediaSortOrder.newestFirst),
+            ),
           Expanded(child: _buildFeed(_recent)),
         ],
       );
     }
-    // Albums tab
-    if (_openAlbum == null) return _buildAlbumList();
+    final album = _openAlbum;
+    final albumFeed = _albumFeed;
+    if (album == null || albumFeed == null) return _buildAlbumList();
     return Column(
       children: [
-        _buildAlbumHeader(_openAlbum!),
-        Expanded(child: _buildFeed(_albumFeed!)),
+        _buildAlbumHeader(album),
+        Expanded(child: _buildFeed(albumFeed)),
       ],
-    );
-  }
-
-  Widget _buildSortRow() {
-    if (!config.enableSort) return const SizedBox.shrink();
-    final rangeActive = _sortOrder == MediaSortOrder.dateRange &&
-        _dateRange != null;
-    return InkWell(
-      onTap: _showSortSheet,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            Icon(
-              Icons.sort,
-              size: 16,
-              color: rangeActive ? c.sortAccent : c.icon,
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                '${config.sortRowLabel}: ${_currentSortLabel()}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: rangeActive ? c.sortAccent : c.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            if (rangeActive) ...[
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: _clearDateRange,
-                child: Icon(Icons.close, size: 16, color: c.secondaryText),
-              ),
-            ],
-            const Spacer(),
-            Icon(Icons.keyboard_arrow_down, size: 18, color: c.secondaryText),
-          ],
-        ),
-      ),
     );
   }
 
@@ -411,20 +313,21 @@ class _PickerBodyState extends State<PickerBody> {
           Container(
             width: 36,
             height: 4,
-            margin: const EdgeInsets.only(top: 8, bottom: 4),
+            margin: const EdgeInsetsDirectional.only(top: 8, bottom: 4),
             decoration: BoxDecoration(
               color: c.divider,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 8),
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   config.title ?? 'Select media',
-                  style: config.titleStyle ??
+                  style:
+                      config.titleStyle ??
                       TextStyle(
                         color: c.title,
                         fontSize: 16,
@@ -448,7 +351,8 @@ class _PickerBodyState extends State<PickerBody> {
 
   Widget _buildTabBar() {
     final labels = [config.recentTabLabel, config.albumsTabLabel];
-    final baseStyle = config.tabLabelStyle ??
+    final baseStyle =
+        config.tabLabelStyle ??
         const TextStyle(fontSize: 14, fontWeight: FontWeight.w600);
     return Container(
       height: config.tabBarHeight,
@@ -457,33 +361,38 @@ class _PickerBodyState extends State<PickerBody> {
         children: List.generate(labels.length, (i) {
           final selected = _tab == i;
           return Expanded(
-            child: InkWell(
-              onTap: () => _onTabChanged(i),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        labels[i],
-                        style: baseStyle.copyWith(
-                          color: selected
-                              ? c.tabSelectedText
-                              : c.tabUnselectedText,
+            child: Semantics(
+              selected: selected,
+              button: true,
+              child: InkWell(
+                onTap: () => _onTabChanged(i),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          labels[i],
+                          style: baseStyle.copyWith(
+                            color: selected
+                                ? c.tabSelectedText
+                                : c.tabUnselectedText,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    height: config.tabIndicatorHeight,
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    decoration: BoxDecoration(
-                      color:
-                          selected ? c.tabIndicator : const Color(0x00000000),
-                      borderRadius: BorderRadius.circular(2),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      height: config.tabIndicatorHeight,
+                      margin: const EdgeInsets.symmetric(horizontal: 24),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? c.tabIndicator
+                            : const Color(0x00000000),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -495,26 +404,18 @@ class _PickerBodyState extends State<PickerBody> {
   // --------------------------------------------------------------- albums
 
   Widget _buildAlbumList() {
-    if (_albumsLoading && _albums.isEmpty) {
-      return Center(
-        child: CircularProgressIndicator(color: c.confirmButton),
-      );
+    if (_albumsLoading && _albums.isEmpty) return _buildSpinner();
+    if (_albumsFailed && _albums.isEmpty) {
+      return _buildError(() => _loadAlbums(force: true));
     }
-    if (_albums.isEmpty) {
-      return Center(
-        child: Text(
-          config.emptyText,
-          style: config.emptyTextStyle ??
-              TextStyle(color: c.secondaryText, fontSize: 14),
-        ),
-      );
-    }
+    if (_albums.isEmpty) return _buildEmpty();
     return ListView.builder(
       controller: widget.scrollController,
       itemCount: _albums.length,
       itemBuilder: (context, index) {
         final album = _albums[index];
-        return _AlbumRow(
+        return PickerAlbumRow(
+          key: ValueKey(album.id),
           album: album,
           config: config,
           showDivider: index < _albums.length - 1,
@@ -529,16 +430,14 @@ class _PickerBodyState extends State<PickerBody> {
       height: 44,
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(Icons.arrow_back, color: c.icon, size: 22),
-            onPressed: _closeAlbumFeed,
-          ),
+          BackButton(color: c.icon, onPressed: _closeAlbumFeed),
           Expanded(
             child: Text(
-              album.name,
+              album.name.isEmpty ? config.unknownAlbumLabel : album.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: config.itemTitleStyle ??
+              style:
+                  config.itemTitleStyle ??
                   TextStyle(
                     color: c.title,
                     fontSize: 15,
@@ -560,33 +459,68 @@ class _PickerBodyState extends State<PickerBody> {
 
   // ---------------------------------------------------------------- feeds
 
-  Widget _buildFeed(_PagedAssets feed) {
-    if (feed.items.isEmpty) {
-      if (feed.loading) {
-        return Center(
-          child: CircularProgressIndicator(color: c.confirmButton),
-        );
-      }
-      return Center(
-        child: Text(
-          config.emptyText,
-          style: config.emptyTextStyle ??
+  Widget _buildSpinner() =>
+      Center(child: CircularProgressIndicator(color: c.confirmButton));
+
+  Widget _buildEmpty() => Center(
+    child: Text(
+      config.emptyText,
+      style:
+          config.emptyTextStyle ??
+          TextStyle(color: c.secondaryText, fontSize: 14),
+    ),
+  );
+
+  Widget _buildError(VoidCallback onRetry) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          config.errorText,
+          textAlign: TextAlign.center,
+          style:
+              config.emptyTextStyle ??
               TextStyle(color: c.secondaryText, fontSize: 14),
         ),
-      );
+        TextButton(
+          onPressed: onRetry,
+          child: Text(
+            config.retryLabel,
+            style: TextStyle(color: c.confirmButton),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildFeed(PagedAssets feed) {
+    if (feed.isEmpty) {
+      if (feed.loading) return _buildSpinner();
+      if (feed.failed) {
+        return _buildError(() {
+          feed.hasMore = true;
+          _loadMore(feed);
+        });
+      }
+      return _buildEmpty();
     }
     return config.listStyle == ListStyle.grid
         ? _buildGrid(feed)
         : _buildListView(feed);
   }
 
-  void _maybeLoadMore(_PagedAssets feed, int index) {
-    if (index >= feed.items.length - 12 && feed.hasMore && !feed.loading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore(feed));
-    }
+  /// Schedules at most one load per frame when a tile near the end is built.
+  void _maybeLoadMore(PagedAssets feed, int index) {
+    if (feed.loadScheduled || feed.loading || !feed.hasMore) return;
+    if (index < feed.items.length - 12) return;
+    feed.loadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      feed.loadScheduled = false;
+      if (mounted) _loadMore(feed);
+    });
   }
 
-  Widget _buildGrid(_PagedAssets feed) {
+  Widget _buildGrid(PagedAssets feed) {
     return GridView.builder(
       controller: widget.scrollController,
       padding: EdgeInsets.all(config.gridSpacing),
@@ -600,7 +534,8 @@ class _PickerBodyState extends State<PickerBody> {
       itemBuilder: (context, index) {
         _maybeLoadMore(feed, index);
         final asset = feed.items[index];
-        return _GridTile(
+        return PickerGridTile(
+          key: ValueKey(asset.id),
           asset: asset,
           selectionIndex: _selectionIndexOf(asset),
           config: config,
@@ -611,14 +546,15 @@ class _PickerBodyState extends State<PickerBody> {
     );
   }
 
-  Widget _buildListView(_PagedAssets feed) {
+  Widget _buildListView(PagedAssets feed) {
     return ListView.builder(
       controller: widget.scrollController,
       itemCount: feed.items.length,
       itemBuilder: (context, index) {
         _maybeLoadMore(feed, index);
         final asset = feed.items[index];
-        return _ListTileItem(
+        return PickerListTile(
+          key: ValueKey(asset.id),
           asset: asset,
           selectionIndex: _selectionIndexOf(asset),
           config: config,
@@ -635,420 +571,51 @@ class _PickerBodyState extends State<PickerBody> {
   Widget _buildConfirmBar() {
     final count = _selected.length;
     final enabled = count > 0 && !_confirming;
-    final label = config.confirmLabelBuilder?.call(count) ??
+    final label =
+        config.confirmLabelBuilder?.call(count) ??
         (count > 0 ? '${config.confirmLabel} ($count)' : config.confirmLabel);
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: GestureDetector(
-          onTap: enabled ? _confirm : null,
-          child: Container(
-            height: config.confirmButtonHeight,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: enabled || _confirming
-                  ? c.confirmButton
-                  : c.confirmButtonDisabled,
-              borderRadius: BorderRadius.circular(config.confirmButtonRadius),
-            ),
-            child: _confirming
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: c.confirmButtonText,
-                    ),
-                  )
-                : Text(
-                    label,
-                    style: config.confirmTextStyle ??
-                        TextStyle(
-                          color: c.confirmButtonText,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// =========================================================== tile widgets
-
-class _SelectionBadge extends StatelessWidget {
-  final int selectionIndex; // -1 = not selected
-  final MediaPickerConfig config;
-
-  const _SelectionBadge({required this.selectionIndex, required this.config});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = config.colors;
-    final selected = selectionIndex >= 0;
-    final size = config.selectionBadgeSize;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: selected ? c.selectedBadge : const Color(0x33000000),
-        border: Border.all(
-          color: selected ? c.selectedBadge : c.unselectedBadgeBorder,
-          width: 1.5,
-        ),
-      ),
-      child: selected
-          ? Center(
-              child: Text(
-                '${selectionIndex + 1}',
-                style: TextStyle(
-                  color: c.selectedBadgeText,
-                  fontSize: size * 0.55,
-                  fontWeight: FontWeight.w700,
-                ),
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 12),
+        child: Semantics(
+          button: true,
+          enabled: enabled,
+          label: label,
+          excludeSemantics: true,
+          child: GestureDetector(
+            onTap: enabled ? _confirm : null,
+            child: Container(
+              height: config.confirmButtonHeight,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: enabled || _confirming
+                    ? c.confirmButton
+                    : c.confirmButtonDisabled,
+                borderRadius: BorderRadius.circular(config.confirmButtonRadius),
               ),
-            )
-          : null,
-    );
-  }
-}
-
-class _VideoDurationChip extends StatelessWidget {
-  final PickedMediaAsset asset;
-  final MediaPickerConfig config;
-
-  const _VideoDurationChip({required this.asset, required this.config});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = config.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: c.videoBadgeBackground,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.videocam, size: 12, color: c.videoBadgeText),
-          const SizedBox(width: 3),
-          Text(
-            asset.durationLabel,
-            style: config.videoDurationStyle ??
-                TextStyle(color: c.videoBadgeText, fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GridTile extends StatelessWidget {
-  final PickedMediaAsset asset;
-  final int selectionIndex;
-  final MediaPickerConfig config;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPress;
-
-  const _GridTile({
-    required this.asset,
-    required this.selectionIndex,
-    required this.config,
-    required this.onTap,
-    this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = config.colors;
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          PickerAssetThumbnail(
-            assetId: asset.id,
-            assetType: asset.typeString,
-            size: config.thumbnailSize,
-            placeholderColor: c.tilePlaceholder,
-          ),
-          if (selectionIndex >= 0)
-            IgnorePointer(child: Container(color: c.selectionOverlay)),
-          if (asset.isVideo)
-            PositionedDirectional(
-              start: 4,
-              bottom: 4,
-              child: _VideoDurationChip(asset: asset, config: config),
-            ),
-          PositionedDirectional(
-            end: 4,
-            top: 4,
-            child: _SelectionBadge(
-              selectionIndex: selectionIndex,
-              config: config,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ListTileItem extends StatelessWidget {
-  final PickedMediaAsset asset;
-  final int selectionIndex;
-  final MediaPickerConfig config;
-  final bool showDivider;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPress;
-
-  const _ListTileItem({
-    required this.asset,
-    required this.selectionIndex,
-    required this.config,
-    required this.showDivider,
-    required this.onTap,
-    this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = config.colors;
-    final subtitleParts = <String>[
-      if (asset.isVideo) asset.durationLabel,
-      if (asset.sizeLabel.isNotEmpty) asset.sizeLabel,
-    ];
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        height: config.listTileHeight,
-        decoration: showDivider
-            ? BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: c.divider, width: 1),
-                ),
-              )
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(config.listThumbnailRadius),
-                child: SizedBox(
-                  width: config.listThumbnailSize,
-                  height: config.listThumbnailSize,
-                  child: PickerAssetThumbnail(
-                    assetId: asset.id,
-                    assetType: asset.typeString,
-                    size: config.thumbnailSize,
-                    placeholderColor: c.tilePlaceholder,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      asset.name ?? (asset.isVideo ? 'Video' : 'Photo'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: config.itemTitleStyle ??
-                          TextStyle(color: c.text, fontSize: 14),
-                    ),
-                    if (subtitleParts.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          subtitleParts.join(' · '),
-                          style: config.itemSubtitleStyle ??
-                              TextStyle(
-                                color: c.secondaryText,
-                                fontSize: 12,
-                              ),
-                        ),
+              child: _confirming
+                  ? SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: c.confirmButtonText,
                       ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              _SelectionBadge(
-                selectionIndex: selectionIndex,
-                config: config,
-              ),
-            ],
+                    )
+                  : Text(
+                      label,
+                      style:
+                          config.confirmTextStyle ??
+                          TextStyle(
+                            color: c.confirmButtonText,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+            ),
           ),
         ),
       ),
     );
-  }
-}
-
-class _AlbumRow extends StatelessWidget {
-  final MediaAlbum album;
-  final MediaPickerConfig config;
-  final bool showDivider;
-  final VoidCallback onTap;
-
-  const _AlbumRow({
-    required this.album,
-    required this.config,
-    required this.showDivider,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = config.colors;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: config.listTileHeight,
-        decoration: showDivider
-            ? BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: c.divider, width: 1),
-                ),
-              )
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(config.listThumbnailRadius),
-                child: SizedBox(
-                  width: config.listThumbnailSize,
-                  height: config.listThumbnailSize,
-                  child: album.coverAssetId == null
-                      ? ColoredBox(color: c.tilePlaceholder)
-                      : PickerAssetThumbnail(
-                          assetId: album.coverAssetId!,
-                          assetType: album.coverAssetType,
-                          size: config.thumbnailSize,
-                          placeholderColor: c.tilePlaceholder,
-                        ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      album.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: config.itemTitleStyle ??
-                          TextStyle(color: c.text, fontSize: 14),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '${album.count}',
-                        style: config.itemSubtitleStyle ??
-                            TextStyle(
-                              color: c.secondaryText,
-                              fontSize: 12,
-                            ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: c.secondaryText,
-                size: 20,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ======================================================= thumbnail widget
-
-/// Loads a native-generated thumbnail through the channel with an
-/// in-memory LRU cache. Never fetches the same (id, size) twice while
-/// it's still cached. Takes raw id/type so it also serves album covers.
-class PickerAssetThumbnail extends StatefulWidget {
-  final String assetId;
-  final String assetType; // 'image' | 'video'
-  final int size;
-  final Color placeholderColor;
-
-  const PickerAssetThumbnail({
-    super.key,
-    required this.assetId,
-    required this.assetType,
-    required this.size,
-    required this.placeholderColor,
-  });
-
-  @override
-  State<PickerAssetThumbnail> createState() => _PickerAssetThumbnailState();
-}
-
-class _PickerAssetThumbnailState extends State<PickerAssetThumbnail> {
-  Uint8List? _bytes;
-
-  String get _cacheKey => '${widget.assetId}_${widget.size}';
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(covariant PickerAssetThumbnail oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.assetId != widget.assetId || oldWidget.size != widget.size) {
-      _bytes = null;
-      _load();
-    }
-  }
-
-  Future<void> _load() async {
-    final cached = PickerThumbnailCache.get(_cacheKey);
-    if (cached != null) {
-      setState(() => _bytes = cached);
-      return;
-    }
-    try {
-      final bytes = await MediaPickerChannel.getThumbnail(
-        id: widget.assetId,
-        type: widget.assetType,
-        size: widget.size,
-      );
-      if (bytes == null || !mounted) return;
-      PickerThumbnailCache.put(_cacheKey, bytes);
-      setState(() => _bytes = bytes);
-    } catch (_) {
-      // keep placeholder
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bytes = _bytes;
-    if (bytes == null) {
-      return ColoredBox(color: widget.placeholderColor);
-    }
-    return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true);
   }
 }
