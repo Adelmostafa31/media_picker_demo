@@ -45,6 +45,16 @@
 
 **New**
 
+* Camera: `CustomMediaPicker.capture(context, config: CameraConfig(...))` takes
+  photos and records videos (hold-to-record, timer, flash, lens switch,
+  pinch-to-zoom, tap-to-focus, review screen, max video length) and returns a
+  `CapturedMedia`. Every part of its UI can be replaced through builders that
+  receive `CameraControls`; colors and labels are configurable.
+* `CameraConfig.saveToGallery` / `galleryAlbum` and
+  `MediaPickerChannel.saveToGallery` add a file to the device gallery.
+* `CameraConfig.maxSelection` / `selectedCount` refuse captures once a shared
+  selection limit is reached, with a configurable notice.
+
 * Tapping past `maxSelection` now shows a notice inside the picker and the
   preview (an app's own SnackBar is hidden under the modal sheet). Customize it
   with `selectionLimitMessage` (text) or `selectionLimitNoticeBuilder` (your own

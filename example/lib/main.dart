@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:custom_media_picker/custom_media_picker.dart';
+
+import 'camera_demo.dart';
+
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
@@ -343,6 +346,11 @@ class _DemoHomePageState extends State<DemoHomePage> {
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
             ),
+          ),
+          _section('Camera'),
+          CameraDemoSection(
+            maxSelection: _maxSelection,
+            pickedCount: _picked.length,
           ),
           const SizedBox(height: 24),
           if (_picked.isNotEmpty) ...[

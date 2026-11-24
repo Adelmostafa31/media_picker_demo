@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>The camera is used to take photos and record videos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The microphone records sound with your videos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Captured photos and videos can be saved to your library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Photos access is needed to pick images and videos from your gallery.</string>
 	<key>UIApplicationSceneManifest</key>

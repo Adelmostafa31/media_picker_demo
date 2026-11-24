@@ -160,6 +160,71 @@ MediaPickerConfig(
 )
 ```
 
+## Camera (photo & video)
+
+`CustomMediaPicker.capture` opens a full-screen camera and returns the photo or
+video the user accepted (`CapturedMedia`), or `null` if they closed it.
+
+```dart
+final media = await CustomMediaPicker.capture(
+  context,
+  config: CameraConfig(
+    modes: [CaptureMode.photo, CaptureMode.video], // tap = photo, hold = video
+    maxVideoDuration: const Duration(seconds: 30),
+    saveToGallery: true,               // also add it to the device gallery
+    galleryAlbum: 'My App',
+    // Share a limit with the gallery picker: 2 already picked of max 2 →
+    // the next capture is refused with a notice when the user taps Use.
+    maxSelection: 2,
+    selectedCount: alreadyPicked.length,
+  ),
+);
+if (media != null) {
+  print('${media.type} ${media.path} ${media.duration} ${media.galleryId}');
+}
+```
+
+Built in: photo and video modes, hold-to-record, self-timer, flash
+(off/auto/on/torch), front/back switch, pinch-to-zoom, tap-to-focus, a
+retake/use review screen, and silent video when the microphone is denied.
+
+### Fully custom UI
+
+Colors (`CameraColors`) and every label are configurable. Each part of the
+screen can also be replaced with your own widget; the builder gets a
+`CameraControls` with the state (`mode`, `isRecording`, `recordingElapsed`,
+`flash`, `zoom`, `countdown`, `isAtSelectionLimit`, ...) and the actions
+(`capture()`, `startRecording()`, `stopRecording()`, `switchLens()`,
+`cycleFlash()`, `setZoom()`, `close()`, ...):
+
+```dart
+CameraConfig(
+  topBarBuilder: (context, c) => MyTopBar(onClose: c.close, flash: c.flash),
+  shutterBuilder: (context, c) => MyShutter(
+    recording: c.isRecording,
+    onTap: c.capture,
+  ),
+  overlayBuilder: (context, c) => const GridLines(),
+  reviewBuilder: (context, media, retake, use) => MyReview(media, retake, use),
+  permissionDeniedBuilder: (context, openSettings, close) => MyDenied(...),
+  selectionLimitNoticeBuilder: (context, max) => MyToast('Max $max'),
+)
+```
+
+The default parts are public too (`DefaultShutterButton`,
+`DefaultCameraTopBar`, `DefaultCameraBottomBar`, `DefaultCameraReview`, ...),
+so a custom layout can reuse them.
+
+### Camera setup
+
+- **iOS** `Info.plist`: `NSCameraUsageDescription`,
+  `NSMicrophoneUsageDescription` (video sound) and, with `saveToGallery`,
+  `NSPhotoLibraryAddUsageDescription`.
+- **Android**: camera and microphone permissions come from the `camera`
+  plugin's manifest. Saving to the gallery needs no permission on Android 10+;
+  on Android 9 and lower `WRITE_EXTERNAL_STORAGE` must already be granted,
+  otherwise `onSaveToGalleryFailed` is called and the capture is still returned.
+
 ## Sorting
 
 The Recent tab can show a sort row under the tab bar with three modes:
