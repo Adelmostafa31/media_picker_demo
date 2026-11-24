@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show DeviceOrientation;
 
 import '../picker_models.dart';
 import 'camera_config.dart';
@@ -172,6 +173,13 @@ class CameraSession extends ChangeNotifier implements CameraControls {
       _minZoom = _maxZoom = 1;
     }
     _zoom = _minZoom;
+    if (config.forcePortrait) {
+      try {
+        await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      } on CameraException {
+        // Not supported on this device: captures follow the rotation.
+      }
+    }
     await _applyFlash(_flash);
     phase = CameraPhase.ready;
     _changed();

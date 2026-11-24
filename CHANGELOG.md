@@ -50,6 +50,8 @@
   pinch-to-zoom, tap-to-focus, review screen, max video length) and returns a
   `CapturedMedia`. Every part of its UI can be replaced through builders that
   receive `CameraControls`; colors and labels are configurable.
+* Captures are saved upright in portrait even when the phone is held
+  sideways (`CameraConfig.forcePortrait`, on by default).
 * `CameraConfig.saveToGallery` / `galleryAlbum` and
   `MediaPickerChannel.saveToGallery` add a file to the device gallery.
 * `CameraConfig.maxSelection` / `selectedCount` refuse captures once a shared

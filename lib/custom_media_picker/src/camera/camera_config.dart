@@ -98,6 +98,11 @@ class CameraConfig {
   /// Show a retake / use screen after capturing.
   final bool showReview;
 
+  /// Save photos and videos upright in portrait even when the phone is held
+  /// sideways (locks the capture orientation to portrait-up). Set false to
+  /// follow the device rotation instead.
+  final bool forcePortrait;
+
   // ---- Selection limit ----
 
   /// Total number of items the user may end up with (0 = unlimited).
@@ -225,6 +230,7 @@ class CameraConfig {
     this.maxVideoDuration,
     this.holdShutterToRecord = true,
     this.showReview = true,
+    this.forcePortrait = true,
     this.maxSelection = 0,
     this.selectedCount = 0,
     this.showSelectionLimitMessage = true,

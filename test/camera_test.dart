@@ -20,6 +20,7 @@ class FakeCamera extends CameraPlatform with MockPlatformInterfaceMixin {
   final created = <MediaSettings>[];
   final opened = <CameraLensDirection>[];
   FlashMode? flash;
+  DeviceOrientation? lockedOrientation;
   double? zoom;
   Point<double>? focus;
   int _nextId = 0;
@@ -104,6 +105,11 @@ class FakeCamera extends CameraPlatform with MockPlatformInterfaceMixin {
       focus = point;
   @override
   Future<void> setExposurePoint(int cameraId, Point<double>? point) async {}
+  @override
+  Future<void> lockCaptureOrientation(
+    int cameraId,
+    DeviceOrientation orientation,
+  ) async => lockedOrientation = orientation;
 
   @override
   Future<XFile> takePicture(int cameraId) async {
@@ -284,6 +290,18 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(find.text('Retake'), findsOneWidget);
+  });
+
+  testWidgets('captures are locked to portrait by default', (tester) async {
+    await openCamera(tester);
+    expect(cam.lockedOrientation, DeviceOrientation.portraitUp);
+  });
+
+  testWidgets('forcePortrait: false follows the device rotation', (
+    tester,
+  ) async {
+    await openCamera(tester, const CameraConfig(forcePortrait: false));
+    expect(cam.lockedOrientation, isNull);
   });
 
   testWidgets('flash cycles through config.flashModes', (tester) async {
