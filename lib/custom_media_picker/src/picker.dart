@@ -1,6 +1,9 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
+import 'camera/camera_config.dart';
+import 'camera/camera_page.dart';
+import 'camera/captured_media.dart';
 import 'picker_body.dart';
 import 'picker_channel.dart';
 import 'picker_config.dart';
@@ -53,6 +56,26 @@ class CustomMediaPicker {
       config.onFocused?.call();
     }
     return assets;
+  }
+
+  /// Opens the camera full screen and returns the photo or video the user
+  /// accepted, or null if they closed it. Camera (and microphone, for video)
+  /// permission is requested by the camera itself.
+  ///
+  /// ```dart
+  /// final media = await CustomMediaPicker.capture(context,
+  ///   config: CameraConfig(maxVideoDuration: Duration(seconds: 30)));
+  /// ```
+  static Future<CapturedMedia?> capture(
+    BuildContext context, {
+    CameraConfig config = const CameraConfig(),
+  }) {
+    return Navigator.of(context, rootNavigator: true).push<CapturedMedia>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => CameraCapturePage(config: config),
+      ),
+    );
   }
 }
 
