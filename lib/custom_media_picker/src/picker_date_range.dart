@@ -192,6 +192,7 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
+            tooltip: pickerLocalizations(context).closeButtonTooltip,
             icon: Icon(Icons.close, color: c.icon, size: 20),
             onPressed: () => Navigator.of(context).pop(),
           ),
@@ -232,6 +233,7 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
       child: Row(
         children: [
           IconButton(
+            tooltip: pickerLocalizations(context).previousMonthTooltip,
             icon: Icon(Icons.chevron_left, color: c.icon),
             onPressed: _pageIndex > 0 ? () => _goToPage(_pageIndex - 1) : null,
           ),
@@ -248,6 +250,7 @@ class _MediaDateRangeSheetState extends State<_MediaDateRangeSheet> {
             ),
           ),
           IconButton(
+            tooltip: pickerLocalizations(context).nextMonthTooltip,
             icon: Icon(Icons.chevron_right, color: c.icon),
             onPressed: _pageIndex < _pageCount - 1
                 ? () => _goToPage(_pageIndex + 1)
