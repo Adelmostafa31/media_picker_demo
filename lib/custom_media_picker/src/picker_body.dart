@@ -63,9 +63,9 @@ class _PickerBodyState extends State<PickerBody> {
     super.initState();
     _sortOrder = config.initialSortOrder;
     final initial = config.initialSelection ?? const [];
-    final max = config.maxSelection;
+    final room = config.remainingSelection;
     // Never start above the limit, otherwise the header shows e.g. "12 / 9".
-    _selected.addAll(max > 0 ? initial.take(max) : initial);
+    _selected.addAll(room == null ? initial : initial.take(room));
     _loadMore(_recent);
   }
 
@@ -214,7 +214,8 @@ class _PickerBodyState extends State<PickerBody> {
       setState(() => _selected.removeAt(i));
       return false;
     }
-    if (config.maxSelection > 0 && _selected.length >= config.maxSelection) {
+    final room = config.remainingSelection;
+    if (room != null && _selected.length >= room) {
       _showLimitNotice();
       config.onSelectionLimitReached?.call();
       return false;
@@ -326,7 +327,8 @@ class _PickerBodyState extends State<PickerBody> {
   }
 
   Widget _buildHeader() {
-    final count = _selected.length;
+    // Total, including items held outside the picker (camera captures).
+    final count = _selected.length + config.externalSelectedCount;
     final countLabel = config.maxSelection > 0
         ? '$count / ${config.maxSelection}'
         : (count > 0 ? '$count' : '');

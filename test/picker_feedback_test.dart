@@ -144,4 +144,71 @@ void main() {
     expect(find.byTooltip('Previous month'), findsOneWidget);
     expect(find.byTooltip('Next month'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  group('externalSelectedCount (camera captures count too)', () {
+    testWidgets('max 2 with 1 captured: only 1 more can be picked', (
+      tester,
+    ) async {
+      _mockNative(3);
+      var reached = 0;
+      await _openPicker(
+        tester,
+        MediaPickerConfig(
+          maxSelection: 2,
+          externalSelectedCount: 1,
+          enableAlbums: false,
+          onSelectionLimitReached: () => reached++,
+        ),
+      );
+      expect(find.text('1 / 2'), findsOneWidget);
+      final tiles = find.byType(PickerAssetThumbnail);
+      await tester.tap(tiles.at(0));
+      await tester.pump();
+      expect(find.text('2 / 2'), findsOneWidget);
+      await tester.tap(tiles.at(1));
+      await tester.pump();
+      expect(find.text('2 / 2'), findsOneWidget);
+      expect(find.text('You can select up to 2 items'), findsOneWidget);
+      expect(reached, 1);
+      await tester.pump(const Duration(seconds: 3));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('already full from captures: every pick is refused', (
+      tester,
+    ) async {
+      _mockNative(2);
+      await _openPicker(
+        tester,
+        const MediaPickerConfig(
+          maxSelection: 2,
+          externalSelectedCount: 2,
+          enableAlbums: false,
+        ),
+      );
+      expect(find.text('2 / 2'), findsOneWidget);
+      await tester.tap(find.byType(PickerAssetThumbnail).first);
+      await tester.pump();
+      expect(find.text('You can select up to 2 items'), findsOneWidget);
+      expect(find.textContaining('Confirm ('), findsNothing);
+      await tester.pump(const Duration(seconds: 3));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    test('remainingSelection', () {
+      expect(const MediaPickerConfig().remainingSelection, isNull);
+      expect(
+        const MediaPickerConfig(
+          maxSelection: 3,
+          externalSelectedCount: 1,
+        ).remainingSelection,
+        2,
+      );
+      expect(
+        const MediaPickerConfig(
+          maxSelection: 2,
+          externalSelectedCount: 5,
+        ).remainingSelection,
+        0,
+      );
+    });
+  });
 }

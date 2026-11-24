@@ -269,8 +269,19 @@ class MediaPickerConfig {
   /// Assets already selected when the picker opens.
   final List<PickedMediaAsset>? initialSelection;
 
-  /// 0 = unlimited.
+  /// Total number of items the user may end up with, counting
+  /// [externalSelectedCount]. 0 = unlimited.
   final int maxSelection;
+
+  /// Items the user already holds outside this picker (e.g. photos taken
+  /// with `CustomMediaPicker.capture`). They count toward [maxSelection]:
+  /// with max 2 and 1 external item, only 1 more can be picked here.
+  final int externalSelectedCount;
+
+  /// How many items this picker may still add (null = unlimited).
+  int? get remainingSelection => maxSelection <= 0
+      ? null
+      : (maxSelection - externalSelectedCount).clamp(0, maxSelection);
 
   /// Assets fetched per page (infinite scroll).
   final int pageSize;
@@ -385,6 +396,7 @@ class MediaPickerConfig {
     this.mediaFilter = MediaFilter.all,
     this.initialSelection,
     this.maxSelection = 0,
+    this.externalSelectedCount = 0,
     this.pageSize = 60,
     this.thumbnailSize = 256,
     this.enablePreview = true,
@@ -425,6 +437,7 @@ class MediaPickerConfig {
        assert(gridCrossAxisCount > 0, 'gridCrossAxisCount must be > 0'),
        assert(pageSize > 0, 'pageSize must be > 0'),
        assert(maxSelection >= 0, 'maxSelection must be >= 0 (0 = unlimited)'),
+       assert(externalSelectedCount >= 0, 'externalSelectedCount must be >= 0'),
        assert(thumbnailSize > 0, 'thumbnailSize must be > 0');
 
   /// The selection-limit notice text for this config.
@@ -466,6 +479,7 @@ class MediaPickerConfig {
     MediaFilter? mediaFilter,
     List<PickedMediaAsset>? initialSelection,
     int? maxSelection,
+    int? externalSelectedCount,
     int? pageSize,
     int? thumbnailSize,
     bool? enablePreview,
@@ -531,6 +545,8 @@ class MediaPickerConfig {
       mediaFilter: mediaFilter ?? this.mediaFilter,
       initialSelection: initialSelection ?? this.initialSelection,
       maxSelection: maxSelection ?? this.maxSelection,
+      externalSelectedCount:
+          externalSelectedCount ?? this.externalSelectedCount,
       pageSize: pageSize ?? this.pageSize,
       thumbnailSize: thumbnailSize ?? this.thumbnailSize,
       enablePreview: enablePreview ?? this.enablePreview,
