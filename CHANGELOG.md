@@ -1,3 +1,46 @@
+## 0.2.0
+
+**Upgrading from 0.1.x** — existing code keeps compiling and working:
+
+* Now a Flutter plugin: the Android/iOS code registers itself. A
+  `MediaPickerHandler` you pasted into `MainActivity`/`AppDelegate` in 0.1.x
+  keeps working, but it shadows the plugin's fixes — delete it and its channel
+  registration.
+* `MediaPickerChannel.checkPermission()`/`requestPermission()` still return the
+  0.1.x strings (now deprecated). The new `checkPermissionStatus()`/
+  `requestPermissionStatus()` return `MediaPermissionStatus`, which tells
+  `denied` (Android can still ask) apart from `permanentlyDenied`.
+* Requires Flutter 3.50 / Dart 3.14, Android API 24, iOS 15. Apps on older
+  Flutter keep resolving 0.1.3.
+
+**Fixes**
+
+* Android: the Recent feed was not sorted on some devices (MIUI / Android 16
+  ignored the sort columns), so "New to old" showed the gallery in storage
+  order.
+* Android: rotated photos (e.g. iPhone HEIC) showed sideways in the grid and
+  upside down in the preview.
+* System/predictive back inside an album now returns to the album list instead
+  of closing the picker and dropping the selection.
+* Changing the sort while a page loads no longer mixes old and new results.
+* Recycled tiles no longer show another asset's thumbnail.
+* Confirm no longer hangs when a path fails; unresolved assets are dropped and
+  reported through `MediaPickerConfig.onAssetsUnavailable`.
+* Preview no longer spins forever on errors or leaks a video controller.
+* Date range calendar no longer repeats or skips a day across DST changes and
+  follows the locale's first day of week and month names.
+* Paging has a stable tie-breaker and de-duplicates by id.
+* Copied originals are written atomically, so a killed copy can't be served
+  later; copies older than a day are purged, or call `clearCache()`.
+* Concurrent permission requests share one dialog, and a request can no longer
+  hang when the activity is destroyed while the dialog is open.
+* Load failures show an error with a retry button instead of "No media found".
+* `initialSelection` is capped at `maxSelection`.
+* iOS hides the Hidden album and no longer downloads iCloud originals for grid
+  thumbnails.
+* `galleryChanges` is now implemented on both platforms.
+* Screen readers no longer read a video's duration twice.
+
 ## 0.1.3
 
 * Added a sort control to the Recent tab: old → new, new → old (default once

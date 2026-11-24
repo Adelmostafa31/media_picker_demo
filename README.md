@@ -23,8 +23,8 @@ A Flutter package that lets you pick images and videos from the device gallery u
 
 | Platform | Supported | Backing API |
 | --- | --- | --- |
-| Android | ✅ API 21+ | `MediaStore` |
-| iOS | ✅ 12+ | `PhotoKit` (`PHAsset`) |
+| Android | ✅ API 24+ | `MediaStore` |
+| iOS | ✅ 15+ | `PhotoKit` (`PHAsset`) |
 | Web / desktop | ❌ | no native implementation — `CustomMediaPicker.pick` returns `null` |
 
 ## Installation
@@ -37,133 +37,37 @@ or add it directly to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  custom_media_picker: ^0.1.3
+  custom_media_picker: ^0.2.0
 ```
 
-> **⚠️ This package is not a plugin — the native setup below is required.**
-> `custom_media_picker` ships the Dart UI plus the native handler *sources*, but
-> it does not auto-register anything. Until you complete
-> [Native setup](#native-setup) the `custom_media_picker` method channel has no
-> receiver, every permission call resolves to `denied`, and the picker closes
-> immediately without ever showing the OS permission dialog.
+Requires Flutter 3.50+ (Dart 3.14+).
 
 ## Native setup
 
-Both platforms need three things: the **permission declaration**, the **handler
-source**, and the **channel registration**.
+Since 0.2.0 this is a Flutter **plugin**: the Android and iOS code registers
+itself, so there is nothing to copy into `MainActivity` or `AppDelegate`.
+Upgrading from 0.1.x? Your pasted `MediaPickerHandler` keeps working, but it
+takes over the channel and hides the plugin's fixes — delete it and its
+channel registration from `MainActivity`/`AppDelegate`.
 
 ### Android
 
-**1. Declare the permissions** in `android/app/src/main/AndroidManifest.xml`,
-directly inside `<manifest>` and above `<application>`:
-
-```xml
-<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-<uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-<uses-permission
-    android:name="android.permission.READ_EXTERNAL_STORAGE"
-    android:maxSdkVersion="32" />
-```
-
-**2. Copy the handler.** Take `android/app/src/main/kotlin/.../MediaPickerHandler.kt`
-from this repository into your app's Kotlin source folder (next to
-`MainActivity.kt`) and change the first line to your own package:
-
-```kotlin
-package com.yourcompany.yourapp
-```
-
-**3. Register the channel** in `MainActivity.kt`. Forwarding
-`onRequestPermissionsResult` is mandatory — without it the permission dialog's
-answer never reaches the handler and `requestPermission()` never completes:
-
-```kotlin
-class MainActivity : FlutterActivity() {
-    private var mediaPickerHandler: MediaPickerHandler? = null
-
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        mediaPickerHandler = MediaPickerHandler(this)
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            MediaPickerHandler.CHANNEL,
-        ).setMethodCallHandler(mediaPickerHandler)
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray,
-    ) {
-        if (mediaPickerHandler?.onRequestPermissionsResult(
-                requestCode, grantResults) == true
-        ) return
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-    }
-}
-```
+The plugin's manifest already declares the gallery permissions below; they
+are merged into your app automatically. `minSdk` must be 24 or higher.
 
 ### iOS
 
-**1. Declare the usage description** in `ios/Runner/Info.plist`. iOS will not
-show the permission dialog without it, and the app will not appear under
-*Settings → Privacy → Photos*, so the user cannot grant access manually either:
+Add the usage description to `ios/Runner/Info.plist`. iOS will not show the
+permission dialog without it, and the app will not appear under
+*Settings → Privacy → Photos*:
 
 ```xml
 <key>NSPhotoLibraryUsageDescription</key>
 <string>Photos access is needed to pick images and videos from your gallery.</string>
 ```
 
-**2. Copy the handler.** Paste the contents of `lib/MediaPickerHandler.swift`
-from this repository into your `ios/Runner/AppDelegate.swift`, below the
-`AppDelegate` class. Keeping it in `AppDelegate.swift` means the code is already
-part of the Runner target — no *Add Files to Runner…* step in Xcode.
-
-**3. Register the channel** in `AppDelegate.swift`. Use whichever variant
-matches the template your app was generated from:
-
-```swift
-// Flutter 3.35+ (scene-based Runner, has didInitializeImplicitFlutterEngine)
-@main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
-  private let mediaPickerHandler = MediaPickerHandler()
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-
-    let channel = FlutterMethodChannel(
-      name: MediaPickerHandler.channelName,
-      binaryMessenger: engineBridge.applicationRegistrar.messenger())
-    channel.setMethodCallHandler { [weak self] call, result in
-      self?.mediaPickerHandler.handle(call, result: result)
-    }
-  }
-}
-```
-
-```swift
-// Older Runner templates (window.rootViewController is the FlutterViewController)
-@main
-@objc class AppDelegate: FlutterAppDelegate {
-  private let mediaPickerHandler = MediaPickerHandler()
-
-  override func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-  ) -> Bool {
-    let controller = window?.rootViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(
-      name: MediaPickerHandler.channelName,
-      binaryMessenger: controller.binaryMessenger)
-    channel.setMethodCallHandler { [weak self] call, result in
-      self?.mediaPickerHandler.handle(call, result: result)
-    }
-    GeneratedPluginRegistrant.register(with: self)
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-  }
-}
-```
+Set the iOS deployment target to 15.0 or higher (`platform :ios, '15.0'` in
+the `Podfile`).
 
 ## Permissions reference
 
@@ -215,16 +119,21 @@ was denied.
 rationale before the system dialog, or offer a way back after a refusal:
 
 ```dart
-final status = await MediaPickerChannel.checkPermission();
-// 'granted' | 'limited' | 'notDetermined' | 'denied'
+final status = await MediaPickerChannel.checkPermissionStatus();
 
-if (status == 'notDetermined') {
-  // The system dialog can still be shown.
-  await MediaPickerChannel.requestPermission();
-} else if (status == 'denied') {
-  // iOS never prompts twice, and Android stops after two refusals —
-  // Settings is the only way back.
-  await MediaPickerChannel.openAppSettings();
+switch (status) {
+  case MediaPermissionStatus.granted || MediaPermissionStatus.limited:
+    break; // ready
+  case MediaPermissionStatus.notDetermined || MediaPermissionStatus.denied:
+    // The system dialog can still be shown (Android re-asks once after a
+    // first refusal).
+    await MediaPickerChannel.requestPermissionStatus();
+  case MediaPermissionStatus.permanentlyDenied:
+    // iOS after any refusal, Android after "Don't ask again". Ask anyway
+    // first: if the user reset the permission in Settings, Android shows the
+    // dialog again; otherwise the request returns at once.
+    final again = await MediaPickerChannel.requestPermissionStatus();
+    if (!again.hasAccess) await MediaPickerChannel.openAppSettings();
 }
 ```
 
@@ -264,17 +173,13 @@ MediaPickerConfig(
 ```
 
 Sorting only affects the Recent feed — album feeds are always newest-first.
-Native `getAssets` calls now carry `ascending`/`startDate`/`endDate`
-arguments; both native handlers default them to today's exact behavior
-(newest-first, no date filter), so existing native setups keep working
-without changes until you copy the updated handler files.
+The custom range compares the capture date (`dateTaken`) on both platforms.
 
 ## Example app
 
 The repository includes a demo app in `example/` showing many configuration
 options, theme presets, selection workflows, and a complete permission request
-flow with a Settings fallback. It has the native setup above already applied, so
-it is the fastest place to see a working integration.
+flow with a Settings fallback.
 
 ```bash
 cd example
@@ -286,10 +191,9 @@ flutter run
 
 | Symptom | Cause |
 | --- | --- |
-| Picker closes instantly, no permission dialog | Native setup skipped — the method channel has no receiver, so every call falls back to `denied`. |
+| Picker closes instantly, no permission dialog | Running on web/desktop, or an old 0.1.x `MediaPickerHandler` is still registered on the same channel. Remove it. |
 | iOS: app missing from *Settings → Privacy → Photos* | `NSPhotoLibraryUsageDescription` missing from `Info.plist`. |
-| Android: request returns `denied` without a dialog | Permissions missing from `AndroidManifest.xml`, or the user refused twice — send them to Settings via `openAppSettings()`. |
-| Android: `requestPermission()` never returns | `onRequestPermissionsResult` not forwarded from `MainActivity`. |
+| Status is `permanentlyDenied` | The user refused for good — send them to Settings via `openAppSettings()`. |
 | Gallery is empty after granting | Status is `limited`; the user picked a subset. Call `openAppSettings()` to let them widen it. |
 
 ## Notes
