@@ -140,6 +140,26 @@ switch (status) {
 `limited` (iOS 14+ "Selected Photos", Android 14+ partial access) is a working
 state: the picker shows the subset the user granted.
 
+## Selection limit
+
+With `maxSelection` set, a tap past the limit shows a short notice inside the
+picker (and in the preview). Don't use a `SnackBar` from
+`onSelectionLimitReached` for this: it's drawn under the picker's modal sheet,
+so the user never sees it.
+
+```dart
+MediaPickerConfig(
+  maxSelection: 9,
+  // Text only:
+  selectionLimitMessage: (max) => 'Up to $max photos',
+  // Or your own widget (replaces the default notice):
+  selectionLimitNoticeBuilder: (context, max) => MyBanner('Max $max items'),
+  // Or nothing at all:
+  // showSelectionLimitMessage: false,
+  onSelectionLimitReached: () => HapticFeedback.lightImpact(),
+)
+```
+
 ## Sorting
 
 The Recent tab can show a sort row under the tab bar with three modes:

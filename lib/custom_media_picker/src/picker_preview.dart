@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,6 +11,7 @@ import 'package:video_player/video_player.dart';
 
 import 'picker_channel.dart';
 import 'picker_config.dart';
+import 'picker_limit_notice.dart';
 import 'picker_models.dart';
 
 /// Full-screen preview opened by long-pressing a tile.
@@ -97,6 +99,7 @@ class _PickerPreviewPageState extends State<PickerPreviewPage> {
 
   @override
   void dispose() {
+    _limitNoticeTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -128,8 +131,11 @@ class _PickerPreviewPageState extends State<PickerPreviewPage> {
             tooltip: MaterialLocalizations.of(context)
                 .selectedRowCountTitle(_selected ? 1 : 0),
             onPressed: () {
+              final wasSelected = _selected;
               final nowSelected = widget.onToggle();
               setState(() => _selected = nowSelected);
+              // Neither selected before nor after: the limit blocked it.
+              if (!wasSelected && !nowSelected) _showLimitMessage();
             },
             icon: Icon(
               _selected ? Icons.check_circle : Icons.radio_button_unchecked,
@@ -139,8 +145,33 @@ class _PickerPreviewPageState extends State<PickerPreviewPage> {
           ),
         ],
       ),
-      body: _buildBody(c),
+      body: Stack(
+        children: [
+          Positioned.fill(child: _buildBody(c)),
+          PositionedDirectional(
+            start: 0,
+            end: 0,
+            bottom: 64, // clear of the video progress bar
+            child: PickerLimitNotice(
+              visible: _limitNotice,
+              config: widget.config,
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  bool _limitNotice = false;
+  Timer? _limitNoticeTimer;
+
+  void _showLimitMessage() {
+    if (!widget.config.showSelectionLimitMessage) return;
+    _limitNoticeTimer?.cancel();
+    setState(() => _limitNotice = true);
+    _limitNoticeTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _limitNotice = false);
+    });
   }
 
   Widget _buildBody(MediaPickerColors c) {

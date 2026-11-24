@@ -40,6 +40,15 @@
   thumbnails.
 * `galleryChanges` is now implemented on both platforms.
 * Screen readers no longer read a video's duration twice.
+* The date range sheet's close / previous / next month buttons have
+  screen-reader labels.
+
+**New**
+
+* Tapping past `maxSelection` now shows a notice inside the picker and the
+  preview (an app's own SnackBar is hidden under the modal sheet). Customize it
+  with `selectionLimitMessage` (text) or `selectionLimitNoticeBuilder` (your own
+  widget), or turn it off with `showSelectionLimitMessage: false`.
 
 ## 0.1.3
 

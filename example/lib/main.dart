@@ -169,14 +169,24 @@ class _DemoHomePageState extends State<DemoHomePage> {
       colors: colorsFor(_theme),
       title: 'Select media',
       confirmLabelBuilder: (n) => 'Send ($n)',
-      onSelectionLimitReached: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Max $_maxSelection items'),
-            duration: const Duration(seconds: 1),
+      // Shown inside the picker; a SnackBar here would sit under the sheet.
+      // Use selectionLimitMessage for text only, or a builder for your own
+      // widget:
+      selectionLimitNoticeBuilder: (context, max) => Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 0),
+        child: Material(
+          color: Colors.orange.shade700,
+          borderRadius: BorderRadius.circular(8),
+          child: ListTile(
+            dense: true,
+            leading: const Icon(Icons.info_outline, color: Colors.white),
+            title: Text(
+              'Max $max items',
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
-        );
-      },
+        ),
+      ),
       onPermissionDenied: () {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

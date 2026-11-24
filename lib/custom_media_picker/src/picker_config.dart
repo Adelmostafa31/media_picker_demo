@@ -323,6 +323,21 @@ class MediaPickerConfig {
   // ---- Colors ----
   final MediaPickerColors colors;
 
+  /// Shows a short notice inside the picker when the user tries to select
+  /// more than [maxSelection]. An app's own SnackBar can't do this: it is
+  /// drawn under the picker's modal route.
+  final bool showSelectionLimitMessage;
+
+  /// Text of that notice; receives [maxSelection].
+  /// Defaults to "You can select up to N items".
+  final String Function(int max)? selectionLimitMessage;
+
+  /// Replaces the default notice with your own widget (in the picker and in
+  /// the preview). Receives [maxSelection]. It is shown for two seconds above
+  /// the confirm button; [selectionLimitMessage] is ignored when set.
+  final Widget Function(BuildContext context, int max)?
+  selectionLimitNoticeBuilder;
+
   // ---- Callbacks ----
   final VoidCallback? onSelectionLimitReached;
   final VoidCallback? onPermissionDenied;
@@ -393,6 +408,9 @@ class MediaPickerConfig {
     this.confirmButtonHeight = 48,
     this.confirmButtonRadius = 12,
     this.colors = const MediaPickerColors(),
+    this.showSelectionLimitMessage = true,
+    this.selectionLimitMessage,
+    this.selectionLimitNoticeBuilder,
     this.onSelectionLimitReached,
     this.onPermissionDenied,
     this.onFocused,
@@ -408,6 +426,11 @@ class MediaPickerConfig {
        assert(pageSize > 0, 'pageSize must be > 0'),
        assert(maxSelection >= 0, 'maxSelection must be >= 0 (0 = unlimited)'),
        assert(thumbnailSize > 0, 'thumbnailSize must be > 0');
+
+  /// The selection-limit notice text for this config.
+  String selectionLimitText() =>
+      selectionLimitMessage?.call(maxSelection) ??
+      'You can select up to $maxSelection items';
 
   MediaPickerConfig copyWith({
     LayoutStyle? layoutStyle,
@@ -466,6 +489,9 @@ class MediaPickerConfig {
     double? confirmButtonHeight,
     double? confirmButtonRadius,
     MediaPickerColors? colors,
+    bool? showSelectionLimitMessage,
+    String Function(int max)? selectionLimitMessage,
+    Widget Function(BuildContext context, int max)? selectionLimitNoticeBuilder,
     VoidCallback? onSelectionLimitReached,
     VoidCallback? onPermissionDenied,
     VoidCallback? onFocused,
@@ -529,6 +555,12 @@ class MediaPickerConfig {
       confirmButtonHeight: confirmButtonHeight ?? this.confirmButtonHeight,
       confirmButtonRadius: confirmButtonRadius ?? this.confirmButtonRadius,
       colors: colors ?? this.colors,
+      showSelectionLimitMessage:
+          showSelectionLimitMessage ?? this.showSelectionLimitMessage,
+      selectionLimitMessage:
+          selectionLimitMessage ?? this.selectionLimitMessage,
+      selectionLimitNoticeBuilder:
+          selectionLimitNoticeBuilder ?? this.selectionLimitNoticeBuilder,
       onSelectionLimitReached:
           onSelectionLimitReached ?? this.onSelectionLimitReached,
       onPermissionDenied: onPermissionDenied ?? this.onPermissionDenied,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
@@ -5,6 +7,7 @@ import 'picker_channel.dart';
 import 'picker_config.dart';
 import 'picker_date_range.dart';
 import 'picker_feed.dart';
+import 'picker_limit_notice.dart';
 import 'picker_models.dart';
 import 'picker_preview.dart';
 import 'picker_sort.dart';
@@ -45,6 +48,10 @@ class _PickerBodyState extends State<PickerBody> {
 
   bool _confirming = false;
 
+  /// Visible while the selection-limit notice is shown.
+  bool _limitNotice = false;
+  Timer? _limitNoticeTimer;
+
   late MediaSortOrder _sortOrder;
   DateTimeRange? _dateRange;
 
@@ -60,6 +67,12 @@ class _PickerBodyState extends State<PickerBody> {
     // Never start above the limit, otherwise the header shows e.g. "12 / 9".
     _selected.addAll(max > 0 ? initial.take(max) : initial);
     _loadMore(_recent);
+  }
+
+  @override
+  void dispose() {
+    _limitNoticeTimer?.cancel();
+    super.dispose();
   }
 
   // -------------------------------------------------------------- loading
@@ -202,11 +215,21 @@ class _PickerBodyState extends State<PickerBody> {
       return false;
     }
     if (config.maxSelection > 0 && _selected.length >= config.maxSelection) {
+      _showLimitNotice();
       config.onSelectionLimitReached?.call();
       return false;
     }
     setState(() => _selected.add(a));
     return true;
+  }
+
+  void _showLimitNotice() {
+    if (!config.showSelectionLimitMessage) return;
+    _limitNoticeTimer?.cancel();
+    setState(() => _limitNotice = true);
+    _limitNoticeTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _limitNotice = false);
+    });
   }
 
   Future<void> _openPreview(PickedMediaAsset a) async {
@@ -268,6 +291,7 @@ class _PickerBodyState extends State<PickerBody> {
           if (widget.showHeader) _buildHeader(),
           if (config.enableAlbums) _buildTabBar(),
           Expanded(child: _buildContent()),
+          PickerLimitNotice(visible: _limitNotice, config: config),
           _buildConfirmBar(),
         ],
       ),
